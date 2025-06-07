@@ -1,8 +1,83 @@
-{% extends "base.html" %}
-
-{% block content %}
-  <div class="p-6">
-    <h1 class="text-3xl font-bold text-blue-600">{{ title }}</h1>
-    <p class="mt-4 text-gray-700">{{ message }}</p>
+{% extends "base.html" %} {% block content %}
+<div class="p-6 w-screen">
+  <div class="flex items-center justify-between">
+    <h1 class="text-3xl font-bold text-blue-600 pb-6">{{ title }}</h1>
+    <button
+      class="bg-blue-600 px-6 py-2 text-white text-xl font-semibold rounded-lg"
+    >
+      Add Student
+    </button>
   </div>
+  <div class="w-full flex flex-col items-center justify-center gap-4">
+    <div class="flex items-center justify-between w-full">
+      <input
+        type="search"
+        placeholder="Search..."
+        class="w-md bg-transparent border border-gray-500 focus:outline-none p-2 rounded"
+      />
+      <div class="flex items-center gap-2">
+        <button class="border border-black p-1 rounded">Filter</button>
+        <button class="border border-black p-1 rounded">Export</button>
+      </div>
+    </div>
+    <table class="w-full rounded-xl border">
+      <thead class="w-full text-left">
+        <tr class="w-full bg-gray-200">
+          <th class="p-2">S/N</th>
+          <th>Name</th>
+          <th>Matric No</th>
+          <th>Department</th>
+          <th>Level</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody class="">
+        <tr class="border-b py-4">
+          <td class="p-2">1</td>
+          <td>Peace Oloruntoba</td>
+          <td>AUL/SCI/21/00726</td>
+          <td>Computing</td>
+          <td>400L</td>
+          <td>
+            <button class="bg-red-600 text-white w-8 h-8">#</button>
+            <button class="bg-blue-600 text-white w-8 h-8">#</button>
+          </td>
+        </tr>
+        <tr class="border-b py-4">
+          <td class="p-2">2</td>
+          <td>Peace Oloruntoba</td>
+          <td>AUL/SCI/21/00726</td>
+          <td>Computing</td>
+          <td>400L</td>
+          <td>
+            <button class="bg-red-600 text-white w-8 h-8">#</button>
+            <button class="bg-blue-600 text-white w-8 h-8">#</button>
+          </td>
+        </tr>
+        <tr class="border-b py-4">
+          <td class="p-2">3</td>
+          <td>Peace Oloruntoba</td>
+          <td>AUL/SCI/21/00726</td>
+          <td>Computing</td>
+          <td>400L</td>
+          <td>
+            <button class="bg-red-600 text-white w-8 h-8">#</button>
+            <button class="bg-blue-600 text-white w-8 h-8">#</button>
+          </td>
+        </tr>
+        <tr class="border-b py-4">
+          <td class="p-2">4</td>
+          <td>Peace Oloruntoba</td>
+          <td>AUL/SCI/21/00726</td>
+          <td>Computing</td>
+          <td>400L</td>
+          <td>
+            <button class="bg-red-600 text-white w-8 h-8">#</button>
+            <button class="bg-blue-600 text-white w-8 h-8">#</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

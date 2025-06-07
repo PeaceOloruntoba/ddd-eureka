@@ -12,7 +12,7 @@ def attendance():
 
 @app.route('/students')
 def students():
-    return render_template('students.html', title='Welcome', message='Hello from Students!')
+    return render_template('students.html', title='Students', message='Hello from Students!')
 
 @app.route('/dashboard')
 def dashboard():
