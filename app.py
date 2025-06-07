@@ -26,7 +26,7 @@ def capture():
 
 @app.route('/attendance')
 def attendance():
-    return render_template('attendance.html', title='Welcome', message='Hello from Attendance!')
+    return render_template('attendance.html', title='Attendance', message='Hello from Attendance!')
 
 @app.route('/students')
 def students():
