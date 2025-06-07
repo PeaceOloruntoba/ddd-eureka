@@ -6,8 +6,8 @@
     <title>{{ title }}</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
-<body>
-   <nav class="flex flex-row items-center justify-between bg-blue-400 p-6 w-full h-fit text-white font-semibold">
+<body class="w-screen min-h-screen flex flex-col">
+   <nav class="flex flex-row items-center justify-between bg-blue-400 px-6 py-2 w-full h-fit text-white font-semibold">
       <div>
         <span class="text-2xl font-bold">Attendance System</span>
       </div>
@@ -17,14 +17,14 @@
            <li><a href="/attendance">Attendance</a></li>
            <li><a href="/students">Students</a></li>
            <li><a href="/dashboard">Dashboard</a></li>
-           <li class="bg-red-600 px-6 py-2 rounded-lg"><a href="/login">Logout</a></li>
+           <li class="bg-red-600 px-4 py-1 rounded-lg"><a href="/login">Logout</a></li>
         </ul>
       </div>
     </nav>
-    <div class="content">
+    <div class="flex-1">
         {% block content %}{% endblock %}
     </div>
-    <div class="footer">
+    <div class="w-full flex items-center justify-center text-center py-4">
         <p>&copy; 2025 My Flask App</p>
     </div>
 </body>

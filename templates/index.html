@@ -1,8 +1,92 @@
-{% extends "base.html" %}
+{% extends "base.html" %} {% block content %}
+<div class="p-6 space-y-4">
+  <div class="grid grid-cols-2">
+    <div class="flex flex-col space-y-4">
+      <h1 class="text-3xl font-bold text-blue-600">{{ title }}</h1>
+      <div class="flex flex-col items-center justify-center space-y-4">
+        <!-- Camera Preview -->
+        <video
+          id="video"
+          autoplay
+          class="rounded shadow w-full max-w-md"
+        ></video>
 
-{% block content %}
-  <div class="p-6">
-    <h1 class="text-3xl font-bold text-blue-600">{{ title }}</h1>
-    <p class="mt-4 text-gray-700">{{ message }}</p>
+        <!-- Capture Button -->
+        <!-- <button
+          id="captureBtn"
+          class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full"
+        >
+          Capture Image
+        </button> -->
+      </div>
+    </div>
+
+    <div class="flex flex-col items-center justify-center">
+      <span class="text-green-600 text-2xl font-semibold"
+        >Attendance Marked Successfully!</span
+      >
+      <span class="text-lg font-semibold"
+        >Attendance for AUL/SC1/21/00726 has been marked</span
+      >
+      <span>Date: dd/mm/yyyy</span>
+      <span>Time: HH:mm:ss</span>
+    </div>
+    <!-- <div class="flex flex-col items-center justify-center">
+      <span class="text-red-600 text-2xl font-semibold"
+        >Failed to mark Attendance!</span
+      >
+      <span class="text-lg font-semibold"
+        >Student not found in the records</span
+      >
+      <span>Date: dd/mm/yyyy</span>
+      <span>Time: HH:mm:ss</span>
+    </div> -->
   </div>
+
+  <!-- Captured Image Display
+  <div id="result" class="mt-4">
+    <h2 class="text-xl font-semibold">Captured Image:</h2>
+    <img id="capturedImage" src="" alt="Captured" class="mt-2 border rounded shadow w-full max-w-md">
+  </div> -->
+</div>
+
+<script>
+  const video = document.getElementById("video");
+  const captureBtn = document.getElementById("captureBtn");
+  const capturedImage = document.getElementById("capturedImage");
+  const resultDiv = document.getElementById("result");
+
+  // Start camera
+  navigator.mediaDevices
+    .getUserMedia({ video: true })
+    .then((stream) => {
+      video.srcObject = stream;
+    })
+    .catch((err) => {
+      console.error("Error accessing camera: ", err);
+    });
+
+  // Capture frame and send to Flask
+  captureBtn.onclick = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+
+    const dataUrl = canvas.toDataURL("image/jpeg");
+
+    fetch("/capture", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: dataUrl }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        capturedImage.src = data.path + "?t=" + new Date().getTime(); // prevent caching
+        resultDiv.scrollIntoView({ behavior: "smooth" });
+      });
+  };
+</script>
 {% endblock %}
