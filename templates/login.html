@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body>
+    <main
+      class="w-screen h-screen flex items-center justify-center bg-gray-200"
+    >
+      <div class="bg-white p-6 border rounded-xl w-md">
+        <div class="flex flex-col items-center w-full">
+          <span class="text-2xl font-semibold">Login</span>
+          <span class="text-xl font-semibold animate-pulse">Welcome back!</span>
+        </div>
+        <form action="" class="flex flex-col gap-3 pt-6">
+          <div class="flex items-center gap-2">
+            <label for="email">Email:</label>
+            <input
+              type="email"
+              class="bg-gray-200 w-full outline-gray-500 p-2 rounded-lg"
+              placeholder="Enter your email address"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="password">Password:</label>
+            <input
+              type="password"
+              class="bg-gray-200 w-full outline-gray-500 p-2 rounded-lg"
+              placeholder="Enter your password"
+            />
+          </div>
+          <button
+            class="w-full bg-blue-600 text-white py-2 items-center text-center font-semibold text-xl rounded-xl"
+          >
+            <a href="/">Login</a>
+          </button>
+        </form>
+      </div>
+    </main>
+  </body>
+</html>
