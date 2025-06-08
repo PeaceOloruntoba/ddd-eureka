@@ -17,7 +17,13 @@
            <li><a href="/attendance">Attendance</a></li>
            <li><a href="/students">Students</a></li>
            <li><a href="/dashboard">Dashboard</a></li>
-           <li class="bg-red-600 px-4 py-1 rounded-lg"><a href="/login">Logout</a></li>
+           <li class="relative">
+               <button class="bg-blue-600 px-4 py-1 rounded-lg">Profile</button>
+               <div class="absolute hidden group-hover:block bg-white text-black rounded shadow-lg mt-2">
+                   <a href="/switch_course" class="block px-4 py-2 hover:bg-gray-100">Switch Course</a>
+                   <a href="/login" class="block px-4 py-2 hover:bg-gray-100">Logout</a>
+               </div>
+           </li>
         </ul>
       </div>
     </nav>
@@ -25,7 +31,7 @@
         {% block content %}{% endblock %}
     </div>
     <div class="w-full flex items-center justify-center text-center py-4">
-        <p>&copy; 2025 My Flask App</p>
+        <p>© 2025 My Flask App</p>
     </div>
 </body>
 </html>
