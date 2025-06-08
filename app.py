@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import firebase_admin
 from firebase_admin import credentials, auth, db, storage
 import cv2
@@ -9,17 +9,17 @@ import face_recognition
 from ultralytics import YOLO
 import pandas as pd
 from datetime import datetime
-import json
 from flask_cors import CORS
 
 app = Flask(__name__)
+app.secret_key = 'your-secret-key'  # Required for session management
 CORS(app)
 
 # Firebase setup
 cred = credentials.Certificate("firebase_credentials.json")
 firebase_admin.initialize_app(cred, {
-    'databaseURL': 'YOUR_FIREBASE_DATABASE_URL',
-    'storageBucket': 'YOUR_FIREBASE_STORAGE_BUCKET'
+    'databaseURL': 'https://attendance-e75b0-default-rtdb.firebaseio.com/',
+    'storageBucket': 'attendance-e75b0.appspot.com'
 })
 db_ref = db.reference()
 bucket = storage.bucket()
@@ -39,21 +39,20 @@ known_face_ids = []
 def load_known_faces():
     global known_face_encodings, known_face_ids
     students_ref = db_ref.child('students')
-    students = students_ref.get()
+    students = students_ref.get() or {}
     known_face_encodings = []
     known_face_ids = []
-    if students:
-        for student_id, data in students.items():
-            if 'face_image' in data:
-                blob = bucket.blob(data['face_image'])
-                temp_file = os.path.join(CAPTURED_IMAGE_DIR, f"{student_id}.jpg")
-                blob.download_to_filename(temp_file)
-                image = face_recognition.load_image_file(temp_file)
-                encodings = face_recognition.face_encodings(image)
-                if encodings:
-                    known_face_encodings.append(encodings[0])
-                    known_face_ids.append(student_id)
-                os.remove(temp_file)
+    for student_id, data in students.items():
+        if 'face_image' in data:
+            blob = bucket.blob(data['face_image'])
+            temp_file = os.path.join(CAPTURED_IMAGE_DIR, f"{student_id}.jpg")
+            blob.download_to_filename(temp_file)
+            image = face_recognition.load_image_file(temp_file)
+            encodings = face_recognition.face_encodings(image)
+            if encodings:
+                known_face_encodings.append(encodings[0])
+                known_face_ids.append(student_id)
+            os.remove(temp_file)
 
 load_known_faces()
 
@@ -73,7 +72,10 @@ def register():
                 'email': email,
                 'courses': courses
             })
-            return redirect(url_for('login'))
+            session['user'] = user.uid
+            session['courses'] = courses
+            session['current_course'] = courses[0] if courses else None
+            return redirect(url_for('home'))
         except Exception as e:
             return render_template('register.html', title='Register', error=str(e))
     return render_template('register.html', title='Register')
@@ -84,8 +86,13 @@ def login():
         email = request.form['email']
         password = request.form['password']
         try:
-            # Firebase Authentication doesn't have a direct login method; use client-side SDK or custom token
-            # For simplicity, assume client-side handles auth and sends token
+            # Note: Firebase Admin SDK doesn't handle login; use client-side SDK
+            # For simplicity, assume client-side auth sets session
+            user = auth.get_user_by_email(email)  # Verify user exists
+            lecturer_data = db_ref.child('lecturers').child(user.uid).get()
+            session['user'] = user.uid
+            session['courses'] = lecturer_data['courses']
+            session['current_course'] = lecturer_data['courses'][0] if lecturer_data['courses'] else None
             return redirect(url_for('home'))
         except Exception as e:
             return render_template('login.html', title='Login', error=str(e))
@@ -93,7 +100,7 @@ def login():
 
 @app.route('/attendance', methods=['GET', 'POST'])
 def attendance():
-    return render_template('attendance.html', title='Attendance')
+    return render_template('attendance.html', title='Attendance', course=session.get('current_course', 'default'))
 
 @app.route('/stream', methods=['POST'])
 def stream():
@@ -105,7 +112,6 @@ def stream():
 
     # YOLO face detection
     results = yolo_model(img)
-    faces = []
     for result in results:
         boxes = result.boxes.xyxy.cpu().numpy()
         for box in boxes:
@@ -117,14 +123,18 @@ def stream():
                 if True in matches:
                     matched_idx = matches.index(True)
                     student_id = known_face_ids[matched_idx]
-                    # Mark attendance
+                    student = db_ref.child('students').child(student_id).get()
                     attendance_ref = db_ref.child('attendance').child(student_id)
                     attendance_ref.push({
                         'date': datetime.now().strftime('%Y-%m-%d'),
                         'time': datetime.now().strftime('%H:%M:%S'),
-                        'course': request.json.get('course', 'default')
+                        'course': session.get('current_course', 'default')
                     })
-                    return jsonify({'status': 'success', 'student_id': student_id})
+                    return jsonify({
+                        'status': 'success',
+                        'student_id': student_id,
+                        'name': student.get('name', 'Unknown')
+                    })
     return jsonify({'status': 'no_match'})
 
 @app.route('/students', methods=['GET', 'POST'])
@@ -142,7 +152,6 @@ def students():
                         'department': row['Department'],
                         'level': str(row['Level'])
                     }
-                    # Handle face image upload
                     if 'face_image' in request.files:
                         face_file = request.files['face_image']
                         blob = bucket.blob(f"faces/{student_id}.jpg")
@@ -151,13 +160,30 @@ def students():
                     db_ref.child('students').child(student_id).set(student_data)
                 load_known_faces()
                 return redirect(url_for('students'))
+        elif 'name' in request.form:
+            student_id = request.form['matric_no']
+            student_data = {
+                'name': request.form['name'],
+                'matric_no': student_id,
+                'department': request.form['department'],
+                'level': request.form['level']
+            }
+            if 'face_image' in request.files:
+                face_file = request.files['face_image']
+                blob = bucket.blob(f"faces/{student_id}.jpg")
+                blob.upload_from_file(face_file)
+                student_data['face_image'] = f"faces/{student_id}.jpg"
+            db_ref.child('students').child(student_id).set(student_data)
+            load_known_faces()
+            return redirect(url_for('students'))
     students = db_ref.child('students').get() or {}
-    return render_template('students.html', title='Students', students=students)
+    return render_template('students.html', title='Students', students=students, course=session.get('current_course', 'default'))
 
 @app.route('/dashboard')
 def dashboard():
     attendance = db_ref.child('attendance').get() or {}
-    return render_template('dashboard.html', title='Dashboard', attendance=attendance)
+    students = db_ref.child('students').get() or {}
+    return render_template('dashboard.html', title='Dashboard', attendance=attendance, students=students, course=session.get('current_course', 'default'))
 
 @app.route('/generate_report/<course>')
 def generate_report(course):
@@ -165,17 +191,18 @@ def generate_report(course):
     students = db_ref.child('students').get() or {}
     data = []
     for student_id, records in attendance.items():
-        if any(record['course'] == course for record in records.values()):
-            student = students.get(student_id, {})
-            data.append({
-                'Name': student.get('name', 'Unknown'),
-                'Matric No': student.get('matric_no', student_id),
-                'Date': records[list(records.keys())[-1]]['date'],
-                'Time': records[list(records.keys())[-1]]['time'],
-                'Status': 'Present'
-            })
+        for record_id, record in records.items():
+            if record['course'] == course:
+                student = students.get(student_id, {})
+                data.append({
+                    'Name': student.get('name', 'Unknown'),
+                    'Matric No': student.get('matric_no', student_id),
+                    'Date': record['date'],
+                    'Time': record['time'],
+                    'Status': 'Present'
+                })
     absent_students = [
-        {'Name': student['name'], 'Matric No': student_id, 'Status': 'Absent'}
+        {'Name': student['name'], 'Matric No': student_id, 'Date': datetime.now().strftime('%Y-%m-%d'), 'Time': '', 'Status': 'Absent'}
         for student_id, student in students.items()
         if student_id not in attendance or not any(record['course'] == course for record in attendance[student_id].values())
     ]
@@ -183,13 +210,18 @@ def generate_report(course):
     output_path = f"static/reports/attendance_{course}_{datetime.now().strftime('%Y%m%d')}.xlsx"
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df.to_excel(output_path, index=False)
-    return jsonify({'path': f'/{output_path}'})
+    return send_file(output_path, as_attachment=True)
 
 @app.route('/switch_course', methods=['POST'])
 def switch_course():
-    course = request.json['course']
-    # Store current course in session or database for the lecturer
-    return jsonify({'status': 'success', 'course': course})
+    course = request.form['course']
+    session['current_course'] = course
+    return redirect(request.referrer or url_for('home'))
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=True)
