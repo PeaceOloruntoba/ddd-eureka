@@ -1,44 +1,53 @@
-<%- include('base') %>
-<div class="p-6">
-  <h1 class="text-3xl font-bold text-blue-600 mb-4"><%= title %></h1>
-  <h2 class="text-xl mb-2">Attendance for <%= course %></h2>
-  <table class="w-full rounded-xl border">
-    <thead class="w-full text-left">
-      <tr class="w-full bg-gray-200">
-        <th class="p-2">S/N</th>
-        <th>Name</th>
-        <th>Matric No</th>
-        <th>Date</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody>
-      <% let index = 0; %>
-      <% for (let student_id in attendance) { %>
-        <% for (let record_id in attendance[student_id]) { %>
-          <% if (attendance[student_id][record_id].course === course) { %>
-            <tr class="border-b py-4">
-              <td class="p-2"><%= ++index %></td>
-              <td><%= students[student_id]?.name || 'Unknown' %></td>
-              <td><%= students[student_id]?.matric_no || student_id %></td>
-              <td><%= attendance[student_id][record_id].date %></td>
-              <td>Present</td>
-            </tr>
-          <% } %>
-        <% } %>
-      <% } %>
-      <% for (let student_id in students) { %>
-        <% if (!attendance[student_id] || !Object.values(attendance[student_id]).some(record => record.course === course)) { %>
-          <tr class="border-b py-4">
-            <td class="p-2"><%= ++index %></td>
-            <td><%= students[student_id].name %></td>
-            <td><%= student_id %></td>
-            <td><%= new Date().toISOString() %></td>
-            <td>Absent</td>
-          </tr>
-        <% } %>
-      <% } %>
-    </tbody>
-  </table>
-</div>
-<%- include('base', { end: true }) %>
+<%
+  const pageBody = `
+    <div class="p-6">
+      <h1 class="text-3xl font-bold text-blue-600 mb-4">${title}</h1>
+      <p class="mt-4 text-lg">Dashboard for <%= course %>.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+        <div class="bg-white p-4 rounded-lg shadow-md">
+          <h2 class="text-xl font-semibold text-gray-700">Total Students</h2>
+          <p class="text-3xl font-bold text-blue-600 mt-2">${Object.keys(students).length}</p>
+        </div>
+
+        <div class="bg-white p-4 rounded-lg shadow-md">
+          <h2 class="text-xl font-semibold text-gray-700">Total Attendance (${course})</h2>
+          <%
+            let totalAttendanceRecords = 0;
+            if (attendance && typeof attendance === 'object') {
+              Object.values(attendance).forEach(studentRecords => {
+                if (typeof studentRecords === 'object') {
+                  Object.values(studentRecords).forEach(record => {
+                    if (record.course === course) {
+                      totalAttendanceRecords++;
+                    }
+                  });
+                }
+              });
+            }
+          %>
+          <p class="text-3xl font-bold text-blue-600 mt-2">${totalAttendanceRecords}</p>
+        </div>
+
+        <div class="bg-white p-4 rounded-lg shadow-md">
+          <h2 class="text-xl font-semibold text-gray-700">Unique Students Attended (${course})</h2>
+          <%
+            const uniqueStudentsAttended = new Set();
+            if (attendance && typeof attendance === 'object') {
+              Object.entries(attendance).forEach(([student_id, studentRecords]) => {
+                if (typeof studentRecords === 'object') {
+                  if (Object.values(studentRecords).some(record => record.course === course)) {
+                    uniqueStudentsAttended.add(student_id);
+                  }
+                }
+              });
+            }
+          %>
+          <p class="text-3xl font-bold text-blue-600 mt-2">${uniqueStudentsAttended.size}</p>
+        </div>
+      </div>
+
+      </div>
+  `;
+%>
+<%- include('base', { title: title, course: course, session: session, attendance: attendance, students: students, body: pageBody }) %>
