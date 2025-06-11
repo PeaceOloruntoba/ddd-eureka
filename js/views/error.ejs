@@ -1,0 +1,11 @@
+<%
+  const pageBody = `
+    <div class="w-full h-full flex flex-col items-center justify-center text-center p-6">
+      <h1 class="text-6xl font-bold text-red-600">Error!</h1>
+      <p class="text-2xl font-semibold text-gray-700 mt-4">Something Went Wrong</p>
+      <p class="text-lg text-gray-500 mt-2">${error || 'An unexpected error occurred.'}</p>
+      <a href="/" class="mt-6 bg-blue-600 text-white px-6 py-3 rounded-lg text-lg hover:bg-blue-700">Go to Home</a>
+    </div>
+  `;
+%>
+<%- include('base', { title: title, body: pageBody, session: session, error: error }) %>
