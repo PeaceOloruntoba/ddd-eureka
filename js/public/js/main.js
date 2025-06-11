@@ -5,17 +5,10 @@ import {
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// Your Firebase client-side configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyDnue-qykLWX85SJqDKbgixAv8y1CRuJXA", // Replace with your actual client-side API key
-  authDomain: "attendance-e75b0.firebaseapp.com",
-  projectId: "attendance-e75b0",
-  storageBucket: "attendance-e75b0.appspot.com",
-  messagingSenderId: "426044164583",
-  appId: "1:426044164583:web:f947cb98449896dcd01542",
-  measurementId: "G-2B94KZC2B7",
-};
+// firebaseClientConfig is passed from the EJS template via a global variable
+const firebaseConfig = window.firebaseClientConfig;
 
+// Initialize Firebase client SDK
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
@@ -24,23 +17,27 @@ const overlayCanvas = document.getElementById("overlay");
 const statusSpan = document.getElementById("status");
 const studentInfoSpan = document.getElementById("student-info");
 const datetimeInfoSpan = document.getElementById("datetime-info");
+const cameraStatusSpan = document.getElementById("camera-status");
 
 let faceMatcher = null;
 let labeledDescriptors = [];
 let detectionInterval = null;
-let lastMarkedStudentId = null; // To prevent marking the same student repeatedly in a short time
+let lastMarkedStudentId = null;
+let lastMarkedTime = 0;
 
 const DETECTION_INTERVAL_MS = 2000; // Check for faces every 2 seconds
 const SUCCESS_DISPLAY_DURATION_MS = 5000; // How long success/fail messages stay on screen
 const DEBOUNCE_MARKING_MS = 30000; // Don't mark attendance for same student within this period
 
 async function loadModelsAndStartCamera() {
-  statusSpan.textContent = "Loading Face Recognition Models...";
+  cameraStatusSpan.textContent = "Loading Face Recognition Models...";
   try {
+    // Load models from the public/models directory
     await faceapi.nets.ssdMobilenetv1.loadFromUri("/models");
     await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
     await faceapi.nets.faceRecognitionNet.loadFromUri("/models");
-    statusSpan.textContent = "Models loaded. Starting camera...";
+
+    cameraStatusSpan.textContent = "Models loaded. Starting camera...";
 
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     video.srcObject = stream;
@@ -48,12 +45,14 @@ async function loadModelsAndStartCamera() {
       video.play();
       overlayCanvas.width = video.videoWidth;
       overlayCanvas.height = video.videoHeight;
+      cameraStatusSpan.style.display = "none"; // Hide status once video is playing
       statusSpan.textContent = "Camera started. Fetching student data...";
       fetchStudentDataAndStartDetection();
     };
   } catch (error) {
     console.error("Error loading models or accessing camera:", error);
-    statusSpan.textContent = `Error: ${error.message}. Please ensure camera is enabled and models are in /public/models.`;
+    cameraStatusSpan.textContent = `Error: ${error.message}. Please ensure camera is enabled and models are in /public/models.`;
+    statusSpan.textContent = "";
     studentInfoSpan.textContent = "";
     datetimeInfoSpan.textContent = "";
   }
@@ -68,8 +67,7 @@ async function fetchStudentDataAndStartDetection() {
       return;
     }
 
-    const idToken = await user.getIdToken();
-    const response = await fetch(`/students_data?auth=${idToken}`); // New backend endpoint to get student data
+    const response = await fetch(`/students_data`); // Fetches all students data from our backend
     if (!response.ok) {
       throw new Error(`Failed to fetch student data: ${response.statusText}`);
     }
@@ -77,14 +75,12 @@ async function fetchStudentDataAndStartDetection() {
 
     labeledDescriptors = [];
     statusSpan.textContent = "Loading student face images...";
+
     for (const [student_id, studentData] of Object.entries(students || {})) {
-      if (studentData.face_image) {
+      if (studentData.face_image_url) {
+        // Use the provided URL (signed or public)
         try {
-          const img = await faceapi.fetchImage(
-            `https://firebasestorage.googleapis.com/v0/b/attendance-e75b0.appspot.com/o/${encodeURIComponent(
-              studentData.face_image
-            )}?alt=media`
-          );
+          const img = await faceapi.fetchImage(studentData.face_image_url);
           const detection = await faceapi
             .detectSingleFace(img)
             .withFaceLandmarks()
@@ -105,6 +101,15 @@ async function fetchStudentDataAndStartDetection() {
         }
       }
     }
+
+    if (labeledDescriptors.length === 0) {
+      statusSpan.textContent =
+        "No student face data loaded. Please add students with images.";
+      studentInfoSpan.textContent = "";
+      datetimeInfoSpan.textContent = "";
+      return;
+    }
+
     faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6); // Lower distance = stricter match
     statusSpan.textContent = "Ready for attendance!";
     studentInfoSpan.textContent = "Waiting for face detection...";
@@ -128,7 +133,7 @@ async function fetchStudentDataAndStartDetection() {
 }
 
 async function detectAndMarkAttendance() {
-  if (!video.srcObject) return; // Camera not ready
+  if (!video.srcObject || !faceMatcher) return; // Camera or face matcher not ready
 
   const detections = await faceapi
     .detectAllFaces(video, new faceapi.SsdMobilenetv1Options())
@@ -140,18 +145,19 @@ async function detectAndMarkAttendance() {
   const ctx = overlayCanvas.getContext("2d");
   ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-  if (detections.length > 0 && faceMatcher) {
+  if (detections.length > 0) {
     let bestMatch = null;
     let bestDistance = Infinity;
 
     resizedDetections.forEach((detection) => {
       const match = faceMatcher.findBestMatch(detection.descriptor);
-      if (match.distance < bestDistance) {
-        // Find the closest match
+      // Only consider matches that are not 'unknown' and are within a reasonable distance
+      if (match.label !== "unknown" && match.distance < bestDistance) {
         bestDistance = match.distance;
         bestMatch = match;
       }
-      faceapi.draw.drawDetections(overlayCanvas, resizedDetections); // Draw all detections
+      // Draw all detections, even if not matched
+      faceapi.draw.drawDetections(overlayCanvas, [detection]);
 
       // Draw match label (optional, for debugging)
       const box = detection.detection.box;
@@ -165,12 +171,13 @@ async function detectAndMarkAttendance() {
       // Debounce mechanism: check if same student was marked recently
       if (
         lastMarkedStudentId === recognizedStudentId &&
-        Date.now() - window.lastMarkedTime < DEBOUNCE_MARKING_MS
+        Date.now() - lastMarkedTime < DEBOUNCE_MARKING_MS
       ) {
+        statusSpan.className = "text-orange-500 text-2xl font-semibold mb-2";
         statusSpan.textContent =
-          "Attendance already marked for this student recently.";
+          "Attendance already checked for this student recently.";
         studentInfoSpan.textContent = `Recognized: ${recognizedStudentId}`;
-        datetimeInfoSpan.textContent = `Last check: ${new Date().toLocaleTimeString()}`;
+        datetimeInfoSpan.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
         return; // Don't mark again
       }
 
@@ -192,17 +199,17 @@ async function detectAndMarkAttendance() {
           studentInfoSpan.textContent = `Attendance for ${data.name} (${data.student_id}) marked.`;
           datetimeInfoSpan.textContent = `Date: ${new Date().toLocaleString()}`;
           lastMarkedStudentId = data.student_id;
-          window.lastMarkedTime = Date.now();
+          lastMarkedTime = Date.now();
         } else if (data.status === "already_marked") {
           statusSpan.className = "text-orange-500 text-2xl font-semibold mb-2";
           statusSpan.textContent = "Already Marked!";
           studentInfoSpan.textContent = `Attendance for ${data.name} (${data.student_id}) already marked today.`;
           datetimeInfoSpan.textContent = `Date: ${new Date().toLocaleString()}`;
-          lastMarkedStudentId = data.student_id; // Still update to debounce
-          window.lastMarkedTime = Date.now();
+          lastMarkedStudentId = data.student_id;
+          lastMarkedTime = Date.now();
         } else {
           statusSpan.className = "text-red-600 text-2xl font-semibold mb-2";
-          statusSpan.textContent = "Error Marking Attendance!";
+          statusSpan.textContent = "Failed to mark Attendance!";
           studentInfoSpan.textContent =
             data.message || "An unknown error occurred.";
           datetimeInfoSpan.textContent = `Time: ${new Date().toLocaleTimeString()}`;
@@ -238,7 +245,22 @@ async function detectAndMarkAttendance() {
 // Check auth state and start face recognition if on the home page
 onAuthStateChanged(auth, (user) => {
   if (user && window.location.pathname === "/") {
-    loadModelsAndStartCamera();
+    // Only proceed if a course is selected
+    const currentCourseElement = document.querySelector(
+      ".text-xl.text-gray-700"
+    );
+    if (
+      currentCourseElement &&
+      currentCourseElement.textContent.includes("None Selected")
+    ) {
+      statusSpan.className = "text-red-500 font-bold";
+      statusSpan.textContent =
+        "Please select a course from the Profile menu to begin.";
+      cameraStatusSpan.textContent = "Camera paused: No course selected.";
+      // Optionally disable video or don't load models
+    } else {
+      loadModelsAndStartCamera();
+    }
   } else if (
     !user &&
     window.location.pathname !== "/login" &&
