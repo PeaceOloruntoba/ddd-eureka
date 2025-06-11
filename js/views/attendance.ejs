@@ -1,21 +1,25 @@
 <%
   const pageBody = `
-    <div class="py-6 w-full h-full flex-1">
-      <h1 class="text-3xl font-bold text-blue-600">${title}</h1>
+    <div class="py-6 px-6 w-full h-full flex flex-col flex-1">
+      <h1 class="text-3xl font-bold text-blue-600 mb-4">${title} - ${course || 'No Course Selected'}</h1>
+      ${!course ? `<p class="text-red-500 font-bold mb-4">Please select a course from the Profile menu to view its attendance history.</p>` : ''}
       <div class="w-full flex h-full pt-4">
-        <div class="w-sm bg-gray-200 h-full flex flex-col gap-2 rounded-r-xl p-2">
+        <div class="w-sm bg-gray-200 h-full flex flex-col gap-2 rounded-r-xl p-2 min-w-48">
+          <h2 class="font-bold text-lg mb-2">Dates</h2>
+          <span class="cursor-pointer p-2 hover:bg-gray-100 rounded-r-xl bg-gray-100 font-semibold" onclick="filterAttendanceByDate('all')">Show All Dates</span>
           ${Object.keys(attendance).length > 0 ?
             Object.values(attendance)
               .flatMap(studentRecords => Object.values(studentRecords))
-              .filter(record => record.course === course)
-              .map(record => new Date(record.date).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }))
+              .filter(record => record.course === course) // Filter by current course
+              .map(record => new Date(record.date).toLocaleDateString())
               .filter((value, index, self) => self.indexOf(value) === index) // Unique dates
-              .map(date => `<span class="cursor-pointer p-2 hover:bg-gray-100 rounded-r-xl" onclick="filterAttendanceByDate('${date}')">Attendance ${date}</span>`)
+              .sort((a,b) => new Date(b) - new Date(a)) // Sort by date descending
+              .map(date => `<span class="cursor-pointer p-2 hover:bg-gray-100 rounded-r-xl" onclick="filterAttendanceByDate('${date}')">${date}</span>`)
               .join('')
             : '<span class="p-2 text-gray-500">No attendance records for this course.</span>'
           }
         </div>
-        <div class="w-full px-4">
+        <div class="w-full px-4 overflow-auto">
           <table class="w-full rounded-xl border" id="attendanceTable">
             <thead class="w-full text-left">
               <tr class="w-full bg-gray-200">
@@ -37,7 +41,7 @@
                       const matricNo = students[student_id] ? students[student_id].matric_no : student_id;
                       const recordDate = new Date(record.date);
                       const formattedDate = recordDate.toLocaleDateString();
-                      const formattedTime = recordDate.toLocaleTimeString();
+                      const formattedTime = recordDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                       return `
                         <tr class="border-b py-4" data-date="${formattedDate}">
                           <td class="p-2"></td> <td>${studentName}</td>
@@ -46,15 +50,15 @@
                           <td>${formattedTime}</td>
                           <td>${record.course}</td>
                           <td>
-                            <button class="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center" onclick="deleteAttendance('${student_id}', '${record_id}')">X</button>
+                            <button class="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" onclick="deleteAttendance('${student_id}', '${record_id}')">X</button>
                           </td>
                         </tr>
                       `;
                     }
-                    return ''; // Return empty string for records not matching the course
+                    return '';
                   }).join('');
                 }).join('')
-                : `<tr><td colspan="7" class="text-center p-4 text-gray-500">No attendance records found.</td></tr>`
+                : `<tr><td colspan="7" class="text-center p-4 text-gray-500">No attendance records found for this course.</td></tr>`
               }
             </tbody>
           </table>
@@ -64,20 +68,26 @@
     <script>
       function updateSN() {
         const table = document.getElementById('attendanceTable');
+        if (!table) return;
         const rows = table.querySelectorAll('tbody tr:not([style*="display: none"])');
         rows.forEach((row, index) => {
-          row.querySelector('td:first-child').textContent = index + 1;
+          const snCell = row.querySelector('td:first-child');
+          if (snCell) snCell.textContent = index + 1;
         });
       }
 
       function filterAttendanceByDate(selectedDate) {
         const rows = document.querySelectorAll('#attendanceTable tbody tr');
         rows.forEach(row => {
-          const rowDate = row.getAttribute('data-date');
-          if (rowDate === selectedDate) {
+          if (selectedDate === 'all') {
             row.style.display = '';
           } else {
-            row.style.display = 'none';
+            const rowDate = row.getAttribute('data-date');
+            if (rowDate === selectedDate) {
+              row.style.display = '';
+            } else {
+              row.style.display = 'none';
+            }
           }
         });
         updateSN(); // Recalculate S/N after filtering
@@ -96,9 +106,8 @@
       //       .catch(error => console.error('Error deleting attendance:', error));
       //   }
       // }
-      // Initial S/N update when page loads
       document.addEventListener('DOMContentLoaded', updateSN);
     </script>
   `;
 %>
-<%- include('base', { title: title, course: course, session: session, body: pageBody }) %>
+<%- include('base', { title: title, course: course, session: session, attendance: attendance, students: students, body: pageBody }) %>
