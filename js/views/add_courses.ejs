@@ -1,0 +1,62 @@
+<%
+  const pageBody = `
+    <div class="p-6 max-w-2xl mx-auto">
+      <h1 class="text-3xl font-bold text-blue-600 mb-4">${title}</h1>
+
+      ${error ? `<p class="text-red-600 mb-4">${error}</p>` : ''}
+      ${success ? `<p class="text-green-600 mb-4">${success}</p>` : ''}
+
+      <div class="bg-white p-6 border rounded-xl shadow-md mb-6">
+        <h2 class="text-xl font-semibold mb-3">Add New Course</h2>
+        <form action="/add_courses" method="POST" class="flex flex-col gap-3">
+          <input
+            type="text"
+            name="new_course"
+            placeholder="e.g., CS101, MTH202"
+            class="border p-2 rounded"
+            required
+          />
+          <button type="submit" class="bg-blue-600 text-white py-2 rounded">
+            Add Course
+          </button>
+        </form>
+      </div>
+
+      <div class="bg-white p-6 border rounded-xl shadow-md">
+        <h2 class="text-xl font-semibold mb-3">Your Current Courses</h2>
+        ${courses && courses.length > 0 ? `
+          <ul class="list-disc list-inside space-y-2">
+            ${courses.map(c => `
+              <li class="flex justify-between items-center bg-gray-100 p-2 rounded">
+                <span>${c}</span>
+                <button
+                  class="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                  onclick="deleteCourse('${c}')"
+                >
+                  X
+                </button>
+              </li>
+            `).join('')}
+          </ul>
+        ` : `<p class="text-gray-500">You have no courses yet. Add one above!</p>`}
+      </div>
+    </div>
+    <script>
+      function deleteCourse(courseCode) {
+        if (confirm(\`Are you sure you want to remove course \${courseCode} from your profile?\`)) {
+          fetch(\`/courses/\${courseCode}\`, { method: "DELETE" })
+            .then(response => response.json())
+            .then(data => {
+              if (data.status === 'success') {
+                location.reload(); // Reload to reflect changes
+              } else {
+                alert(data.message || 'Failed to delete course.');
+              }
+            })
+            .catch(error => console.error('Error deleting course:', error));
+        }
+      }
+    </script>
+  `;
+%>
+<%- include('base', { title: title, body: pageBody, error: error, success: success, courses: courses, session: session }) %>
