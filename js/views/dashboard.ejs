@@ -1,0 +1,44 @@
+<%- include('base') %>
+<div class="p-6">
+  <h1 class="text-3xl font-bold text-blue-600 mb-4"><%= title %></h1>
+  <h2 class="text-xl mb-2">Attendance for <%= course %></h2>
+  <table class="w-full rounded-xl border">
+    <thead class="w-full text-left">
+      <tr class="w-full bg-gray-200">
+        <th class="p-2">S/N</th>
+        <th>Name</th>
+        <th>Matric No</th>
+        <th>Date</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% let index = 0; %>
+      <% for (let student_id in attendance) { %>
+        <% for (let record_id in attendance[student_id]) { %>
+          <% if (attendance[student_id][record_id].course === course) { %>
+            <tr class="border-b py-4">
+              <td class="p-2"><%= ++index %></td>
+              <td><%= students[student_id]?.name || 'Unknown' %></td>
+              <td><%= students[student_id]?.matric_no || student_id %></td>
+              <td><%= attendance[student_id][record_id].date %></td>
+              <td>Present</td>
+            </tr>
+          <% } %>
+        <% } %>
+      <% } %>
+      <% for (let student_id in students) { %>
+        <% if (!attendance[student_id] || !Object.values(attendance[student_id]).some(record => record.course === course)) { %>
+          <tr class="border-b py-4">
+            <td class="p-2"><%= ++index %></td>
+            <td><%= students[student_id].name %></td>
+            <td><%= student_id %></td>
+            <td><%= new Date().toISOString() %></td>
+            <td>Absent</td>
+          </tr>
+        <% } %>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+<%- include('base', { end: true }) %>

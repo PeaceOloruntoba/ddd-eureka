@@ -15,13 +15,19 @@
   "type": "module",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon app.js"
   },
   "dependencies": {
+    "assert": "^2.1.0",
     "cors": "^2.8.5",
+    "ejs": "^3.1.10",
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
+    "express-fileupload": "^1.5.1",
     "express-session": "^1.18.1",
-    "firebase-admin": "^13.4.0"
+    "firebase": "^11.9.1",
+    "firebase-admin": "^13.4.0",
+    "nodemon": "^3.1.10"
   }
 }

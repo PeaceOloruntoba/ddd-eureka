@@ -1,0 +1,90 @@
+<%- include('base') %>
+<div class="p-6 w-screen">
+  <div class="flex items-center justify-between">
+    <h1 class="text-3xl font-bold text-blue-600 pb-6"><%= title %></h1>
+    <div>
+      <button class="bg-blue-600 px-4 py-1 text-white font-semibold rounded-lg" onclick="document.getElementById('addStudent').classList.remove('hidden')">Add Student</button>
+      <button class="bg-green-600 px-4 py-1 text-white font-semibold rounded-lg" onclick="document.getElementById('uploadXlsx').classList.remove('hidden')">Upload XLSX</button>
+    </div>
+  </div>
+  <div id="addStudent" class="hidden mb-4">
+    <form action="/students" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+      <input type="text" name="name" placeholder="Name" class="border p-2 rounded" required>
+      <input type="text" name="matric_no" placeholder="Matric No" class="border p-2 rounded" required>
+      <input type="text" name="department" placeholder="Department" class="border p-2 rounded" required>
+      <input type="text" name="level" placeholder="Level" class="border p-2 rounded" required>
+      <input type="file" name="face_image" accept="image/*" class="border p-2 rounded" required>
+      <button type="submit" class="bg-blue-600 text-white py-2 rounded">Submit</button>
+    </form>
+  </div>
+  <div id="uploadXlsx" class="hidden mb-4">
+    <form action="/students" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+      <input type="file" name="file" accept=".xlsx" class="border p-2 rounded" required>
+      <button type="submit" class="bg-green-600 text-white py-2 rounded">Upload</button>
+    </form>
+  </div>
+  <div class="w-full flex flex-col items-center justify-center gap-4">
+    <div class="flex items-center justify-between w-full">
+      <input type="search" placeholder="Search..." class="w-md bg-transparent border border-gray-500 focus:outline-none p-2 rounded">
+      <div class="flex items-center gap-2 text-md">
+        <button class="border border-black p-1 rounded">Filter</button>
+        <button class="border border-black p-1 rounded" onclick="window.location.href='/generate_report/<%= course %>'">Export</button>
+      </div>
+    </div>
+    <table class="w-full rounded-xl border">
+      <thead class="w-full text-left">
+        <tr class="w-full bg-gray-200">
+          <th class="p-2">S/N</th>
+          <th>Name</th>
+          <th>Matric No</th>
+          <th>Department</th>
+          <th>Level</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% Object.entries(students).forEach(([student_id, student], index) => { %>
+        <tr class="border-b py-4">
+          <td class="p-2"><%= index + 1 %></td>
+          <td><%= student.name %></td>
+          <td><%= student.matric_no %></td>
+          <td><%= student.department %></td>
+          <td><%= student.level %></td>
+          <td>
+            <button class="bg-red-600 text-white w-8 h-8" onclick="deleteStudent('<%= student_id %>')">X</button>
+            <button class="bg-blue-600 text-white w-8 h-8" onclick="editStudent('<%= student_id %>')">#</button>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyDnue-qykLWX85SJqDKbgixAv8y1CRuJXA",
+    authDomain: "attendance-e75b0.firebaseapp.com",
+    projectId: "attendance-e75b0",
+    storageBucket: "attendance-e75b0.appspot.com",
+    messagingSenderId: "426044164583",
+    appId: "1:426044164583:web:f947cb98449896dcd01542",
+    measurementId: "G-2B94KZC2B7"
+  };
+  firebase.initializeApp(firebaseConfig);
+  firebase.auth().onAuthStateChanged(user => {
+    if (!user) window.location.href = '/login';
+  });
+  function deleteStudent(student_id) {
+    if (confirm('Are you sure you want to delete this student?')) {
+      fetch(`/students/${student_id}`, { method: 'DELETE' })
+        .then(() => location.reload());
+    }
+  }
+  function editStudent(student_id) {
+    // Implement edit functionality if needed
+    alert('Edit functionality not implemented yet.');
+  }
+</script>
+<%- include('base', { end: true }) %>

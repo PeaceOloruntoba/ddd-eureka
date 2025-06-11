@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link href="/css/styles.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+  <% if (!end) { %>
+  <nav class="bg-blue-600 text-white p-4 flex justify-between">
+    <div>
+      <a href="/" class="px-4">Home</a>
+      <a href="/attendance" class="px-4">Attendance</a>
+      <a href="/students" class="px-4">Students</a>
+      <a href="/dashboard" class="px-4">Dashboard</a>
+    </div>
+    <div>
+      <% if (course && session.courses) { %>
+      <form action="/switch_course" method="POST" class="inline">
+        <select name="course" onchange="this.form.submit()">
+          <% session.courses.forEach(c => { %>
+            <option value="<%= c %>" <%= course === c ? 'selected' : '' %>><%= c %></option>
+          <% }) %>
+        </select>
+      </form>
+      <% } %>
+      <a href="/logout" class="px-4">Logout</a>
+    </div>
+  </nav>
+  <main class="container mx-auto">
+    <%- body %>
+  </main>
+  <% } %>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<%- include('base') %>
+<div class="p-6 space-y-4">
+  <div class="grid grid-cols-2">
+    <div class="flex flex-col space-y-4">
+      <h1 class="text-3xl font-bold text-blue-600"><%= title %></h1>
+      <div class="flex flex-col items-center justify-center space-y-4">
+        <video id="video" autoplay class="rounded shadow w-full"></video>
+      </div>
+    </div>
+    <div class="flex flex-col items-center justify-center">
+      <span id="status" class="text-green-600 text-2xl font-semibold"></span>
+      <span id="student" class="text-lg font-semibold"></span>
+      <span id="date"></span>
+    </div>
+  </div>
+</div>
+<script src="/face-api.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"></script>
+<script type="module" src="/js/main.js"></script>
+<%- include('base', { end: true }) %>
