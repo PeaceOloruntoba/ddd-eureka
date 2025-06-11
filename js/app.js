@@ -7,17 +7,22 @@ import { getStorage } from "firebase-admin/storage";
 import { getDatabase } from "firebase-admin/database";
 import ExcelJS from "exceljs";
 import path from "path";
-import fs from "fs/promises";
-import fileUpload from "express-fileupload";
+import { dirname } from "path";
 import { fileURLToPath } from "url";
+import fileUpload from "express-fileupload";
+import fs from "fs/promises";
+import { readFileSync } from "fs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Read JSON file synchronously
+const serviceAccount = JSON.parse(
+  readFileSync("./firebase_credentials.json", "utf8")
+);
 
 const app = express();
-import assert from "assert";
 
 // Firebase setup
-import serviceAccount from "./firebase_credentials.json"
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: "https://attendance-e75b0-default-rtdb.firebaseio.com/",
@@ -48,6 +53,7 @@ app.get("/", (req, res) => {
   res.render("index", {
     title: "Welcome",
     course: req.session.current_course || "default",
+    session: req.session,
   });
 });
 
@@ -83,6 +89,7 @@ app.post("/login", async (req, res) => {
     const lecturerData = (
       await db.ref(`lecturers/${decodedToken.uid}`).once("value")
     ).val();
+    end = true;
     req.session.user = decodedToken.uid;
     req.session.courses = lecturerData.courses;
     req.session.current_course = lecturerData.courses[0];
@@ -129,6 +136,7 @@ app.get("/students", (req, res) => {
       title: "Students",
       students: snapshot.val() || {},
       course: req.session.current_course || "default",
+      session: req.session,
     });
   });
 });
@@ -181,6 +189,7 @@ app.get("/dashboard", (req, res) => {
       attendance: attendanceSnapshot.val() || {},
       students: studentsSnapshot.val() || {},
       course: req.session.current_course || "default",
+      session: req.session,
     });
   });
 });

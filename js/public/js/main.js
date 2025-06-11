@@ -111,6 +111,6 @@ onAuthStateChanged(auth, (user) => {
     window.location.pathname !== "/login" &&
     window.location.pathname !== "/register"
   ) {
-    window.location.href = "/login";
+    window.location.href = "/attendance";
   }
 });

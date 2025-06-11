@@ -2,11 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><%= title %></title>
   <link href="/css/styles.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100">
+  <%
+    const end = typeof locals.end !== 'undefined' ? locals.end : false;
+    // Define 'course' with a default value (e.g., empty string or null)
+    const course = typeof locals.course !== 'undefined' ? locals.course : null;
+    // Define 'session' with a default empty object if not provided
+    const session = typeof locals.session !== 'undefined' ? locals.session : {};
+  %>
+
   <% if (!end) { %>
   <nav class="bg-blue-600 text-white p-4 flex justify-between">
     <div>
@@ -16,7 +24,7 @@
       <a href="/dashboard" class="px-4">Dashboard</a>
     </div>
     <div>
-      <% if (course && session.courses) { %>
+      <% if (course && session.courses && Array.isArray(session.courses)) { %>
       <form action="/switch_course" method="POST" class="inline">
         <select name="course" onchange="this.form.submit()">
           <% session.courses.forEach(c => { %>
