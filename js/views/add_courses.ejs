@@ -42,20 +42,20 @@
       </div>
     </div>
     <script>
-      function deleteCourse(courseCode) {
-        if (confirm(\`Are you sure you want to remove course \${courseCode} from your profile?\`)) {
-          fetch(\`/courses/\${courseCode}\`, { method: "DELETE" })
-            .then(response => response.json())
-            .then(data => {
-              if (data.status === 'success') {
-                location.reload(); // Reload to reflect changes
-              } else {
-                alert(data.message || 'Failed to delete course.');
-              }
-            })
-            .catch(error => console.error('Error deleting course:', error));
-        }
-      }
+      // function deleteCourse(courseCode) {
+      //   if (confirm(\`Are you sure you want to remove course \${courseCode} from your profile?\`)) {
+      //     fetch(\`/courses/\${courseCode}\`, { method: "DELETE" })
+      //       .then(response => response.json())
+      //       .then(data => {
+      //         if (data.status === 'success') {
+      //           location.reload(); // Reload to reflect changes
+      //         } else {
+      //           alert(data.message || 'Failed to delete course.');
+      //         }
+      //       })
+      //       .catch(error => console.error('Error deleting course:', error));
+      //   }
+      // }
     </script>
   `;
 %>
