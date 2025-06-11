@@ -2,43 +2,57 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><%= title %></title>
   <link href="/css/styles.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
-<body class="bg-gray-100">
+<body class="w-screen min-h-screen max-h-screen flex flex-col">
   <%
-    const end = typeof locals.end !== 'undefined' ? locals.end : false;
-    // Define 'course' with a default value (e.g., empty string or null)
-    const course = typeof locals.course !== 'undefined' ? locals.course : null;
-    // Define 'session' with a default empty object if not provided
-    const session = typeof locals.session !== 'undefined' ? locals.session : {};
+    // Safely define variables for course and session, defaulting to null/empty object
+    const currentCourse = typeof locals.course !== 'undefined' ? locals.course : null;
+    const currentSession = typeof locals.session !== 'undefined' ? locals.session : {};
   %>
 
-  <% if (!end) { %>
-  <nav class="bg-blue-600 text-white p-4 flex justify-between">
+  <nav class="flex flex-row items-center justify-between bg-blue-600 px-6 py-2 w-full h-fit text-white font-semibold fixed top-0 z-50">
     <div>
-      <a href="/" class="px-4">Home</a>
-      <a href="/attendance" class="px-4">Attendance</a>
-      <a href="/students" class="px-4">Students</a>
-      <a href="/dashboard" class="px-4">Dashboard</a>
+      <span class="text-2xl font-bold">Attendance System</span>
     </div>
-    <div>
-      <% if (course && session.courses && Array.isArray(session.courses)) { %>
-      <form action="/switch_course" method="POST" class="inline">
-        <select name="course" onchange="this.form.submit()">
-          <% session.courses.forEach(c => { %>
-            <option value="<%= c %>" <%= course === c ? 'selected' : '' %>><%= c %></option>
-          <% }) %>
-        </select>
-      </form>
-      <% } %>
-      <a href="/logout" class="px-4">Logout</a>
+    <% if (currentSession.user) { %> <%# Only show nav links if user is logged in %>
+    <div class="flex items-center gap-6 justify-center">
+      <ul class="list-none flex items-center gap-6 justify-center">
+        <li><a href="/">Home</a></li>
+        <li><a href="/attendance">Attendance</a></li>
+        <li><a href="/students">Students</a></li>
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li class="relative group"> <%# Added 'group' class for hover dropdown %>
+          <button class="bg-blue-600 px-4 py-1 rounded-lg">Profile</button>
+          <div class="absolute hidden group-hover:block bg-white text-black rounded shadow-lg mt-2 z-10">
+            <% if (currentSession.courses && Array.isArray(currentSession.courses) && currentSession.courses.length > 0) { %>
+            <form action="/switch_course" method="POST" class="block">
+              <select name="course" onchange="this.form.submit()" class="block px-4 py-2 hover:bg-gray-100 w-full text-left">
+                <% currentSession.courses.forEach(c => { %>
+                  <option value="<%= c %>" <%= currentCourse === c ? 'selected' : '' %>><%= c %></option>
+                <% }) %>
+              </select>
+            </form>
+            <% } else { %>
+              <span class="block px-4 py-2 text-gray-500">No courses available</span>
+            <% } %>
+            <a href="/logout" class="block px-4 py-2 hover:bg-gray-100">Logout</a>
+          </div>
+        </li>
+      </ul>
     </div>
+    <% } %>
   </nav>
-  <main class="container mx-auto">
-    <%- body %>
-  </main>
-  <% } %>
+
+  <div class="flex-1 h-full w-full items-center justify-center">
+    <%- body %> <%# This is the placeholder for view-specific content %>
+  </div>
+
+  <div class="w-full flex items-center justify-center text-center py-4 fixed h-fit bottom-0 z-50">
+    <p>© 2025 Attendance System</p>
+  </div>
 </body>
 </html>
