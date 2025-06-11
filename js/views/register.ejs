@@ -1,88 +1,52 @@
 <%
-  // Define the content for the 'body' variable using JavaScript template literal interpolation
   const pageBody = `
-  <div class="p-6 max-w-md mx-auto">
-    <h1 class="text-3xl font-bold text-blue-600 mb-4">${title}</h1>
-    ${error ? `<p class="text-red-600 mb-4">${error}</p>` : ''}
-    <form action="/register" method="POST" class="flex flex-col gap-3">
-      <input
-        type="email"
-        name="email"
-        placeholder="Email"
-        class="border p-2 rounded"
-        required
-      />
-      <input
-        type="password"
-        name="password"
-        placeholder="Password"
-        class="border p-2 rounded"
-        required
-      />
-      <input
-        type="password"
-        name="confirmPassword"
-        placeholder="Confirn Password"
-        class="border p-2 rounded"
-        required
-      />
-      <input
-        type="text"
-        name="courses"
-        placeholder="Courses (comma-separated)"
-        class="border p-2 rounded"
-        required
-      />
-      <button type="submit" class="bg-blue-600 text-white py-2 rounded">
-        Register
-      </button>
-    </form>
-    <p class="mt-2">
-      Already have an account? <a href="/login" class="text-blue-600">Login</a>
-    </p>
-  </div>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"></script>
-    <script>
-      // NOTE: This Firebase script is for the login page's client-side logic.
-      // If this is the register page, you might want to adjust the script to handle registration.
-      // Assuming this is still for login for now, but pointing out the potential mismatch.
-      const firebaseConfig = {
-        apiKey: "AIzaSyDnue-qykLWX85SJqDKbgixAv8y1CRuJXA",
-        authDomain: "attendance-e75b0.firebaseapp.com",
-        projectId: "attendance-e75b0",
-        storageBucket: "attendance-e75b0.appspot.com",
-        messagingSenderId: "426044164583",
-        appId: "1:42604416458398449896dcd01542",
-        measurementId: "G-2B94KZC2B7"
-      };
-      firebase.initializeApp(firebaseConfig);
-      const auth = firebase.auth();
-      // The event listener below looks like it belongs to the login page's button.
-      // For a register page, you'd typically have a different button ID and registration logic.
-      // I'm leaving it as is for now to directly address the EJS error, but this might need review.
-      // document.getElementById('loginBtn').addEventListener('click', async () => {
-      //   const email = document.getElementById('email').value;
-      //   const password = document.getElementById('password').value;
-      //   try {
-      //     const userCredential = await auth.signInWithEmailAndPassword(email, password);
-      //     const idToken = await userCredential.user.getIdToken();
-      //     const response = await fetch('/login', {
-      //       method: 'POST',
-      //       headers: { 'Content-Type': 'application/json' },
-      //       body: JSON.stringify({ idToken: idToken })
-      //     });
-      //     const data = await response.json();
-      //     if (data.status === 'success') {
-      //       window.location.href = '/';
-      //     } else {
-      //       alert(data.error);
-      //     }
-      //   } catch (error) {
-      //     alert(error.message);
-      //   }
-      // });
-    </script>
-  `;
+    <main class="w-screen h-screen flex items-center justify-center bg-gray-200">
+      <div class="bg-white p-6 border rounded-xl w-md">
+        <div class="flex flex-col items-center w-full">
+          <span class="text-2xl font-semibold">Register</span>
+          <span class="text-xl font-semibold animate-pulse">Join us!</span>
+          ${error ? `<span class="text-red-600">${error}</span>` : ''}
+        </div>
+        <form action="/register" method="POST" class="flex flex-col gap-3 pt-6">
+          <div class="flex items-center gap-2">
+            <label for="email">Email:</label>
+            <input
+              type="email"
+              name="email"
+              class="bg-gray-200 w-full outline-gray-500 p-2 rounded-lg"
+              placeholder="Enter your email address"
+              required
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="password">Password:</label>
+            <input
+              type="password"
+              name="password"
+              class="bg-gray-200 w-full outline-gray-500 p-2 rounded-lg"
+              placeholder="Enter your password"
+              required
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="courses">Courses (comma-separated, optional):</label>
+            <input
+              type="text"
+              name="courses"
+              class="bg-gray-200 w-full outline-gray-500 p-2 rounded-lg"
+              placeholder="e.g., CS101, MTH202"
+            />
+          </div>
+          <button
+            type="submit"
+            class="w-full bg-blue-600 text-white py-2 items-center text-center font-semibold text-xl rounded-xl"
+          >
+            Register
+          </button>
+        </form>
+        <a href="/login" class="text-blue-600 mt-4 block text-center">Login</a>
+      </div>
+    </main>
+    `;
 %>
 <%- include('base', { title: title, body: pageBody, error: error }) %>
