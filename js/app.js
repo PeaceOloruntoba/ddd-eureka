@@ -43,7 +43,7 @@ app.use(express.static("public")); // Serves static files from 'public' director
 app.use(fileUpload());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "a_default_secret_if_env_fails", // Use a strong secret from .env
+    secret: process.env.SESSION_SECRET || "davzee", // Use a strong secret from .env
     resave: false,
     saveUninitialized: false,
     cookie: { secure: process.env.NODE_ENV === "production" }, // Use secure cookies in production
