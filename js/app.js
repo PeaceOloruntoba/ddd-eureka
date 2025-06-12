@@ -127,6 +127,7 @@ app.get("/login", (req, res) => {
     title: "Login",
     error: null,
     firebaseClientConfig: app.locals.firebaseClientConfig, // Pass Firebase config
+    session: req.session,
   });
 });
 
@@ -161,7 +162,11 @@ app.post("/login", async (req, res) => {
 // GET /register - Register page
 app.get("/register", (req, res) => {
   if (req.session.user) return res.redirect("/"); // Redirect if already logged in
-  res.render("register", { title: "Register", error: null });
+  res.render("register", {
+    title: "Register",
+    error: null,
+    session: req.session,
+  });
 });
 
 // POST /register - Handle user registration and initial course assignment

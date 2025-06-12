@@ -7,7 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   </head>
 <body class="w-screen min-h-screen max-h-screen flex flex-col">
-  <nav class="flex flex-row items-center justify-between bg-blue-400 px-6 py-2 w-full h-fit text-white font-semibold">
+  <nav class="flex flex-row items-center justify-between bg-blue-400 px-6 py-2 w-full h-fit text-white font-semibold fixed top-0 z-50">
     <div>
       <span class="text-2xl font-bold">Attendance System</span>
     </div>
@@ -44,11 +44,11 @@
     <% } %>
   </nav>
 
-  <div class="flex-1">
+  <div class="flex-1 h-screen">
     <%- body %> <%# This is the placeholder for view-specific content %>
   </div>
 
-  <div class="w-full flex items-center justify-center text-center py-4">
+  <div class="w-full flex items-center justify-center text-center py-4 fixed bottom-0 z-50">
     <p>© 2025 Attendance System</p>
   </div>
 </body>
