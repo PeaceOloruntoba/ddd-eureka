@@ -1,18 +1,18 @@
 <%
   const pageBody = `
-    <main class="w-screen h-screen flex items-center justify-center bg-gray-200 ">
-      <div class="bg-white p-6 border rounded-xl w-xl">
+    <main class="w-screen h-screen flex items-center justify-center bg-gray-200">
+      <div class="bg-white p-6 border rounded-xl w-md">
         <div class="flex flex-col items-center w-full">
           <span class="text-2xl font-semibold">Register</span>
           <span class="text-xl font-semibold animate-pulse">Join us!</span>
-          ${error ? `<span class="text-red-600">${error}</span>` : ''}
+          <span id="errorMessage" class="text-red-600 mt-2"></span> <%# Added ID for JS %>
         </div>
-        <form action="/register" method="POST" class="flex flex-col gap-3 pt-6">
+        <form id="registerForm" class="flex flex-col gap-3 pt-6"> <%# Added ID, removed action/method %>
           <div class="flex items-center gap-2">
             <label for="email">Email:</label>
             <input
               type="email"
-              name="email"
+              id="email" <%# Added ID %>
               class="bg-gray-200 w-full outline-gray-500 p-2 rounded-lg"
               placeholder="Enter your email address"
               required
@@ -22,7 +22,7 @@
             <label for="password">Password:</label>
             <input
               type="password"
-              name="password"
+              id="password" <%# Added ID %>
               class="bg-gray-200 w-full outline-gray-500 p-2 rounded-lg"
               placeholder="Enter your password"
               required
@@ -32,13 +32,14 @@
             <label for="courses">Courses (comma-separated, optional):</label>
             <input
               type="text"
-              name="courses"
+              id="courses" <%# Added ID %>
               class="bg-gray-200 w-full outline-gray-500 p-2 rounded-lg"
               placeholder="e.g., CS101, MTH202"
             />
           </div>
           <button
             type="submit"
+            id="registerBtn" <%# Added ID %>
             class="w-full bg-blue-600 text-white py-2 items-center text-center font-semibold text-xl rounded-xl"
           >
             Register
@@ -47,6 +48,19 @@
         <a href="/login" class="text-blue-600 mt-4 block text-center">Login</a>
       </div>
     </main>
+    <script>
+      // Make firebaseClientConfig globally available for external scripts
+      window.firebaseClientConfig = {
+        apiKey: "${firebaseClientConfig.apiKey}",
+        authDomain: "${firebaseClientConfig.authDomain}",
+        projectId: "${firebaseClientConfig.projectId}",
+        storageBucket: "${firebaseClientConfig.storageBucket}",
+        messagingSenderId: "${firebaseClientConfig.messagingSenderId}",
+        appId: "${firebaseClientConfig.appId}",
+        measurementId: "${firebaseClientConfig.measurementId}"
+      };
+    </script>
+    <script type="module" src="/js/register.js"></script> <%# Link to external script %>
   `;
 %>
-<%- include('base', { title: title, body: pageBody, error: error, session: session }) %>
+<%- include('base', { title: title, body: pageBody, error: error, session: session, firebaseClientConfig: firebaseClientConfig }) %>

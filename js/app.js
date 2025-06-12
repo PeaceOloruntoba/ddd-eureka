@@ -171,9 +171,12 @@ app.get("/register", (req, res) => {
 
 // POST /register - Handle user registration and initial course assignment
 app.post("/register", async (req, res) => {
-  const { email, password, courses } = req.body;
+  const { idToken, courses } = req.body; // Expect ID Token and courses from client-side
   try {
-    const userRecord = await auth.createUser({ email, password });
+    const decodedToken = await auth.verifyIdToken(idToken); // Verify the token
+    const lecturerUid = decodedToken.uid;
+    const lecturerEmail = decodedToken.email; // Get email from decoded token
+
     const parsedCourses = courses
       ? courses
           .split(",")
@@ -181,17 +184,32 @@ app.post("/register", async (req, res) => {
           .filter((c) => c)
       : [];
 
-    await db.ref(`lecturers/${userRecord.uid}`).set({
-      email,
-      courses: parsedCourses,
-    });
+    // Check if lecturer profile already exists to prevent overwriting
+    const existingLecturer = (
+      await db.ref(`lecturers/${lecturerUid}`).once("value")
+    ).val();
+    if (existingLecturer) {
+      // If profile exists, maybe update courses or just confirm registration
+      await db.ref(`lecturers/${lecturerUid}`).update({
+        courses: [
+          ...new Set([...(existingLecturer.courses || []), ...parsedCourses]),
+        ], // Merge courses
+      });
+    } else {
+      // Create new lecturer profile in RTDB
+      await db.ref(`lecturers/${lecturerUid}`).set({
+        email: lecturerEmail,
+        courses: parsedCourses,
+      });
+    }
 
-    req.session.user = userRecord.uid;
-    req.session.courses = parsedCourses;
+    // Establish server-side session
+    req.session.user = lecturerUid;
+    req.session.courses = parsedCourses; // Set based on the newly registered courses
     req.session.current_course =
       parsedCourses.length > 0 ? parsedCourses[0] : null;
 
-    res.redirect("/");
+    res.json({ status: "success", message: "Registration successful!" });
   } catch (error) {
     console.error("Registration error:", error);
     let errorMessage = error.message;
@@ -199,8 +217,14 @@ app.post("/register", async (req, res) => {
       errorMessage = "This email is already registered.";
     } else if (error.code === "auth/weak-password") {
       errorMessage = "Password is too weak. Must be at least 6 characters.";
+    } else if (
+      error.code === "auth/id-token-expired" ||
+      error.code === "auth/invalid-id-token"
+    ) {
+      errorMessage =
+        "Authentication token expired or invalid. Please try logging in again.";
     }
-    res.render("register", { title: "Register", error: errorMessage });
+    res.status(400).json({ status: "error", error: errorMessage });
   }
 });
 
