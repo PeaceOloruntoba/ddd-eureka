@@ -1,5 +1,5 @@
 // public/js/register.js
-import { auth } from "./firebase-init.js";
+import { auth } from "../firebase-init.js";
 import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 document.addEventListener("DOMContentLoaded", () => {
