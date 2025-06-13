@@ -38,8 +38,11 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken: idToken }),
       });
+      console.log(response);
 
       const data = await response.json();
+      console.log(data);
+
 
       if (data.status === "success") {
         window.location.href = "/";
@@ -47,6 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
         errorMessageSpan.textContent =
           data.error || "Login failed. Please try again.";
       }
+      window.location.href = "/";
     } catch (error) {
       console.error("Firebase/Backend login error:", error);
       let displayMessage = "An unexpected error occurred. Please try again.";
