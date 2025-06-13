@@ -66,7 +66,7 @@
               <th>Matric No</th>
               <th>Department</th>
               <th>Level</th>
-              <th>Courses</th> <%# Display courses student is associated with %>
+              <th>Courses</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -74,12 +74,12 @@
             ${Object.keys(students).length > 0 ?
               Object.entries(students).filter(([id, student]) => student.courses && student.courses.includes(course)).map(([student_id, student]) => `
                 <tr class="border-b py-4">
-                  <td class="p-2"></td> <%# S/N will be assigned by JS %>
+                  <td class="p-2"></td>
                   <td>${student.name}</td>
                   <td>${student.matric_no}</td>
                   <td>${student.department}</td>
                   <td>${student.level}</td>
-                  <td>${student.courses ? student.courses.join(', ') : 'N/A'}</td> <%# Display student's courses %>
+                  <td>${student.courses ? student.courses.join(', ') : 'N/A'}</td>
                   <td>
                     <button class="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" onclick="openEditStudentModal('${student_id}', '${encodeURIComponent(JSON.stringify(student))}')">E</button>
                     <button class="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm ml-1" onclick="deleteStudent('${student_id}')">X</button>
