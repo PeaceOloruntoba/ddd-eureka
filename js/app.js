@@ -29,8 +29,7 @@ let db, storage, auth;
 try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL:
-      "https://attendance-e75b0-default-rtdb.<region>.firebasedatabase.app/", // Replace <region>
+    databaseURL: "https://attendance-e75b0-default-rtdb.firebaseio.com/", // Replace <region>
     storageBucket: "attendance-e75b0.appspot.com",
   });
   db = getDatabase();
@@ -203,7 +202,6 @@ app.get("/register", (req, res) => {
 });
 
 app.post("/register", async (req, res) => {
-  console.log("Register attempt:", req.body);
   const { idToken, courses } = req.body;
   try {
     if (!auth) throw new Error("Firebase Auth not initialized");
