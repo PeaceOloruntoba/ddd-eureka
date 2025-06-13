@@ -1,14 +1,11 @@
-// public/js/main.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// firebaseClientConfig is passed from the EJS template via a global variable
 const firebaseConfig = window.firebaseClientConfig;
 
-// Initialize Firebase client SDK
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
@@ -25,14 +22,13 @@ let detectionInterval = null;
 let lastMarkedStudentId = null;
 let lastMarkedTime = 0;
 
-const DETECTION_INTERVAL_MS = 2000; // Check for faces every 2 seconds
-const SUCCESS_DISPLAY_DURATION_MS = 5000; // How long success/fail messages stay on screen
-const DEBOUNCE_MARKING_MS = 30000; // Don't mark attendance for same student within this period
+const DETECTION_INTERVAL_MS = 2000;
+const SUCCESS_DISPLAY_DURATION_MS = 5000;
+const DEBOUNCE_MARKING_MS = 30000;
 
 async function loadModelsAndStartCamera() {
   cameraStatusSpan.textContent = "Loading Face Recognition Models...";
   try {
-    // Load models from the public/models directory
     await faceapi.nets.ssdMobilenetv1.loadFromUri("/models");
     await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
     await faceapi.nets.faceRecognitionNet.loadFromUri("/models");
@@ -45,7 +41,7 @@ async function loadModelsAndStartCamera() {
       video.play();
       overlayCanvas.width = video.videoWidth;
       overlayCanvas.height = video.videoHeight;
-      cameraStatusSpan.style.display = "none"; // Hide status once video is playing
+      cameraStatusSpan.style.display = "none";
       statusSpan.textContent = "Camera started. Fetching student data...";
       fetchStudentDataAndStartDetection();
     };
@@ -67,7 +63,7 @@ async function fetchStudentDataAndStartDetection() {
       return;
     }
 
-    const response = await fetch(`/students_data`); // Fetches all students data from our backend
+    const response = await fetch(`/students_data`);
     if (!response.ok) {
       throw new Error(`Failed to fetch student data: ${response.statusText}`);
     }
@@ -78,7 +74,6 @@ async function fetchStudentDataAndStartDetection() {
 
     for (const [student_id, studentData] of Object.entries(students || {})) {
       if (studentData.face_image_url) {
-        // Use the provided URL (signed or public)
         try {
           const img = await faceapi.fetchImage(studentData.face_image_url);
           const detection = await faceapi
@@ -110,12 +105,11 @@ async function fetchStudentDataAndStartDetection() {
       return;
     }
 
-    faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6); // Lower distance = stricter match
+    faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
     statusSpan.textContent = "Ready for attendance!";
     studentInfoSpan.textContent = "Waiting for face detection...";
     datetimeInfoSpan.textContent = "";
 
-    // Start the detection loop
     if (detectionInterval) clearInterval(detectionInterval);
     detectionInterval = setInterval(
       detectAndMarkAttendance,
@@ -133,7 +127,7 @@ async function fetchStudentDataAndStartDetection() {
 }
 
 async function detectAndMarkAttendance() {
-  if (!video.srcObject || !faceMatcher) return; // Camera or face matcher not ready
+  if (!video.srcObject || !faceMatcher) return;
 
   const detections = await faceapi
     .detectAllFaces(video, new faceapi.SsdMobilenetv1Options())
@@ -151,15 +145,12 @@ async function detectAndMarkAttendance() {
 
     resizedDetections.forEach((detection) => {
       const match = faceMatcher.findBestMatch(detection.descriptor);
-      // Only consider matches that are not 'unknown' and are within a reasonable distance
       if (match.label !== "unknown" && match.distance < bestDistance) {
         bestDistance = match.distance;
         bestMatch = match;
       }
-      // Draw all detections, even if not matched
       faceapi.draw.drawDetections(overlayCanvas, [detection]);
 
-      // Draw match label (optional, for debugging)
       const box = detection.detection.box;
       const text = `${match.label} (${Math.round(match.distance * 100) / 100})`;
       new faceapi.draw.DrawBox(box, { label: text }).draw(overlayCanvas);
@@ -168,7 +159,6 @@ async function detectAndMarkAttendance() {
     if (bestMatch && bestMatch.label !== "unknown") {
       const recognizedStudentId = bestMatch.label;
 
-      // Debounce mechanism: check if same student was marked recently
       if (
         lastMarkedStudentId === recognizedStudentId &&
         Date.now() - lastMarkedTime < DEBOUNCE_MARKING_MS
@@ -178,7 +168,7 @@ async function detectAndMarkAttendance() {
           "Attendance already checked for this student recently.";
         studentInfoSpan.textContent = `Recognized: ${recognizedStudentId}`;
         datetimeInfoSpan.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
-        return; // Don't mark again
+        return;
       }
 
       statusSpan.textContent = `Recognizing: ${recognizedStudentId}...`;
@@ -222,9 +212,8 @@ async function detectAndMarkAttendance() {
           "Could not send attendance. Check console.";
         datetimeInfoSpan.textContent = "";
       } finally {
-        // Clear status message after a delay
         setTimeout(() => {
-          statusSpan.className = "text-2xl font-semibold mb-2"; // Reset class
+          statusSpan.className = "text-2xl font-semibold mb-2";
           statusSpan.textContent = "Ready for attendance!";
           studentInfoSpan.textContent = "Waiting for face detection...";
           datetimeInfoSpan.textContent = "";
@@ -242,10 +231,8 @@ async function detectAndMarkAttendance() {
   }
 }
 
-// Check auth state and start face recognition if on the home page
 onAuthStateChanged(auth, (user) => {
   if (user && window.location.pathname === "/") {
-    // Only proceed if a course is selected
     const currentCourseElement = document.querySelector(
       ".text-xl.text-gray-700"
     );
@@ -257,7 +244,6 @@ onAuthStateChanged(auth, (user) => {
       statusSpan.textContent =
         "Please select a course from the Profile menu to begin.";
       cameraStatusSpan.textContent = "Camera paused: No course selected.";
-      // Optionally disable video or don't load models
     } else {
       loadModelsAndStartCamera();
     }
@@ -266,7 +252,6 @@ onAuthStateChanged(auth, (user) => {
     window.location.pathname !== "/login" &&
     window.location.pathname !== "/register"
   ) {
-    // If not logged in and not on login/register page, redirect to login
     window.location.href = "/login";
   }
 });
