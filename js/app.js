@@ -420,14 +420,11 @@ app.delete(
 );
 
 app.get("/students", isAuthenticated, async (req, res) => {
-  const students = db
-    ? (await db.ref("students").once("value")).val() || {}
-    : mockData.students;
-
+  const students = db ? (await db.ref("students").once("value")).val() || {} : mockData.students;
   res.render("students", {
     title: "Manage Students",
     students,
-    course: req.session.current_course || "N/A",
+    course: req.session.current_course || null,
     session: req.session,
   });
 });
@@ -435,21 +432,16 @@ app.get("/students", isAuthenticated, async (req, res) => {
 app.post("/students", isAuthenticated, async (req, res) => {
   const currentCourse = req.session.current_course;
   if (!currentCourse) {
-    return res.redirect(
-      `/students?error=${encodeURIComponent("No course selected.")}`
-    );
+    return res.redirect(`/students?error=${encodeURIComponent("No course selected.")}`);
   }
 
+  // Handle XLSX Upload
   if (req.files && req.files.file) {
     const file = req.files.file;
     const courseToAssign = req.body.course_to_upload_students || currentCourse;
 
     if (!file.name.endsWith(".xlsx")) {
-      return res.redirect(
-        `/students?error=${encodeURIComponent(
-          "Invalid file format. Please upload an XLSX file."
-        )}`
-      );
+      return res.redirect(`/students?error=${encodeURIComponent("Invalid file format. Please upload an XLSX file.")}`);
     }
 
     try {
@@ -458,35 +450,24 @@ app.post("/students", isAuthenticated, async (req, res) => {
       const worksheet = workbook.worksheets[0];
 
       const studentUpdates = {};
-
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-
-        const name = row.getCell(1).value;
-        const matric_no = row.getCell(2).value;
-        const department = row.getCell(3).value;
-        const level = row.getCell(4).value;
+        if (rowNumber === 1) return; // Skip header
+        const name = row.getCell(1).value?.toString();
+        const matric_no = row.getCell(2).value?.toString();
+        const department = row.getCell(3).value?.toString();
+        const level = row.getCell(4).value?.toString();
 
         if (name && matric_no && department && level) {
-          const student_id = matric_no.toString().trim();
-          studentUpdates[student_id] = {
-            name,
-            matric_no: student_id,
-            department,
-            level: level.toString(),
-          };
+          const student_id = matric_no.trim();
+          studentUpdates[student_id] = { name, matric_no: student_id, department, level };
         }
       });
 
       for (const student_id in studentUpdates) {
         const newStudentData = studentUpdates[student_id];
-        const existingStudent = db
-          ? (await db.ref(`students/${student_id}`).once("value")).val() || {}
-          : mockData.students[student_id] || {};
+        const existingStudent = db ? (await db.ref(`students/${student_id}`).once("value")).val() || {} : mockData.students[student_id] || {};
         let courses = existingStudent.courses || [];
-        if (!courses.includes(courseToAssign)) {
-          courses.push(courseToAssign);
-        }
+        if (!courses.includes(courseToAssign)) courses.push(courseToAssign);
         const studentData = { ...newStudentData, courses };
         if (db) {
           await db.ref(`students/${student_id}`).set(studentData);
@@ -495,120 +476,58 @@ app.post("/students", isAuthenticated, async (req, res) => {
         }
       }
 
-      return res.redirect(
-        "/students?success=Students from XLSX uploaded successfully!"
-      );
+      return res.redirect("/students?success=Students uploaded successfully!");
     } catch (error) {
-      console.error("Error processing XLSX upload:", error);
-      return res.redirect(
-        `/students?error=${encodeURIComponent(
-          "Failed to upload XLSX: " + error.message
-        )}`
-      );
-    }
-  } else if (req.body.name && req.body.matric_no) {
-    const { name, matric_no, department, level, course_to_add_student } =
-      req.body;
-    const student_id = matric_no.trim();
-    const assignedCourse = course_to_add_student || currentCourse;
-
-    if (!assignedCourse) {
-      return res.redirect(
-        `/students?error=${encodeURIComponent(
-          "Please select a course to assign the student to."
-        )}`
-      );
-    }
-
-    try {
-      const existingStudent = db
-        ? (await db.ref(`students/${student_id}`).once("value")).val()
-        : mockData.students[student_id];
-      let courses = existingStudent ? existingStudent.courses || [] : [];
-      if (!courses.includes(assignedCourse)) {
-        courses.push(assignedCourse);
-      }
-
-      let studentData = {
-        name,
-        matric_no: student_id,
-        department,
-        level: level.toString(),
-        courses,
-      };
-
-      if (req.files && req.files.face_image) {
-        const file = req.files.face_image;
-        const filePath = `faces/${student_id}.jpg`;
-        try {
-          if (storage) {
-            await storage.file(filePath).save(file.data, {
-              contentType: file.mimetype,
-            });
-          } else {
-            await fs.writeFile(
-              path.join(__dirname, "public", filePath),
-              file.data
-            );
-          }
-          studentData.face_image = filePath;
-        } catch (error) {
-          console.warn("Failed to save face image:", error.message);
-        }
-      } else if (existingStudent && existingStudent.face_image) {
-        studentData.face_image = existingStudent.face_image;
-      }
-
-      if (db) {
-        await db.ref(`students/${student_id}`).set(studentData);
-      } else {
-        mockData.students[student_id] = studentData;
-      }
-      return res.redirect("/students?success=Student added successfully!");
-    } catch (error) {
-      console.error("Error adding student:", error);
-      return res.redirect(
-        `/students?error=${encodeURIComponent(
-          "Failed to add student: " + error.message
-        )}`
-      );
+      console.error("Error processing XLSX:", error);
+      return res.redirect(`/students?error=${encodeURIComponent("Failed to upload XLSX: " + error.message)}`);
     }
   }
-  res.redirect("/students?error=Invalid request for adding student.");
-});
 
-app.delete("/students/:student_id", isAuthenticated, async (req, res) => {
-  const { student_id } = req.params;
+  // Handle Single Student Add
+  const { name, matric_no, department, level, course_to_add_student } = req.body;
+  const student_id = matric_no?.trim();
+  const assignedCourse = course_to_add_student || currentCourse;
+
+  if (!name || !student_id || !department || !level || !assignedCourse) {
+    return res.redirect(`/students?error=${encodeURIComponent("All fields are required.")}`);
+  }
+
   try {
-    const studentData = db
-      ? (await db.ref(`students/${student_id}`).once("value")).val()
-      : mockData.students[student_id];
-    if (studentData && studentData.face_image) {
+    const existingStudent = db ? (await db.ref(`students/${student_id}`).once("value")).val() : mockData.students[student_id];
+    let courses = existingStudent?.courses || [];
+    if (!courses.includes(assignedCourse)) courses.push(assignedCourse);
+
+    let studentData = { name, matric_no: student_id, department, level, courses };
+
+    if (req.files && req.files.face_image) {
+      const file = req.files.face_image;
+      if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
+        return res.redirect(`/students?error=${encodeURIComponent("Face image must be JPEG or PNG.")}`);
+      }
+      const filePath = `faces/${student_id}.${file.mimetype.split("/")[1]}`;
       try {
         if (storage) {
-          await storage.file(studentData.face_image).delete();
+          await storage.file(filePath).save(file.data, { contentType: file.mimetype });
         } else {
-          await fs.unlink(
-            path.join(__dirname, "public", studentData.face_image)
-          );
+          await fs.writeFile(path.join(__dirname, "public", filePath), file.data);
         }
-      } catch (err) {
-        console.warn(`Could not delete image for ${student_id}:`, err.message);
+        studentData.face_image = filePath;
+      } catch (error) {
+        console.warn("Failed to save face image:", error.message);
       }
+    } else if (existingStudent?.face_image) {
+      studentData.face_image = existingStudent.face_image;
     }
+
     if (db) {
-      await db.ref(`students/${student_id}`).remove();
+      await db.ref(`students/${student_id}`).set(studentData);
     } else {
-      delete mockData.students[student_id];
+      mockData.students[student_id] = studentData;
     }
-    res
-      .status(200)
-      .json({ status: "success", message: "Student profile deleted." });
+    return res.redirect("/students?success=Student added successfully!");
   } catch (error) {
-    console.error("Error deleting student:", error);
-    res
-      .status(500)
-      .json({ status: "error", message: "Failed to delete student." });
+    console.error("Error adding student:", error);
+    return res.redirect(`/students?error=${encodeURIComponent("Failed to add student: " + error.message)}`);
   }
 });
 
@@ -617,23 +536,14 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
   const { name, department, level, courses } = req.body;
 
   try {
-    const existingStudent = db
-      ? (await db.ref(`students/${student_id}`).once("value")).val()
-      : mockData.students[student_id];
+    const existingStudent = db ? (await db.ref(`students/${student_id}`).once("value")).val() : mockData.students[student_id];
     if (!existingStudent) {
-      return res.redirect(
-        `/students?error=${encodeURIComponent(
-          "Student not found for editing."
-        )}`
-      );
+      return res.redirect(`/students?error=${encodeURIComponent("Student not found.")}`);
     }
 
     let updatedCourses = courses
-      ? courses
-          .split(",")
-          .map((c) => c.trim().toUpperCase())
-          .filter((c) => c)
-      : [];
+      ? courses.split(",").map(c => c.trim().toUpperCase()).filter(c => c)
+      : existingStudent.courses || [];
 
     let studentData = {
       name: name || existingStudent.name,
@@ -645,17 +555,21 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
 
     if (req.files && req.files.face_image) {
       const file = req.files.face_image;
-      const filePath = `faces/${student_id}.jpg`;
+      if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
+        return res.redirect(`/students?error=${encodeURIComponent("Face image must be JPEG or PNG.")}`);
+      }
+      const filePath = `faces/${student_id}.${file.mimetype.split("/")[1]}`;
       try {
         if (storage) {
-          await storage.file(filePath).save(file.data, {
-            contentType: file.mimetype,
-          });
+          await storage.file(filePath).save(file.data, { contentType: file.mimetype });
+          if (existingStudent.face_image && existingStudent.face_image !== filePath) {
+            await storage.file(existingStudent.face_image).delete().catch(() => {});
+          }
         } else {
-          await fs.writeFile(
-            path.join(__dirname, "public", filePath),
-            file.data
-          );
+          await fs.writeFile(path.join(__dirname, "public", filePath), file.data);
+          if (existingStudent.face_image && existingStudent.face_image !== filePath) {
+            await fs.unlink(path.join(__dirname, "public", existingStudent.face_image)).catch(() => {});
+          }
         }
         studentData.face_image = filePath;
       } catch (error) {
@@ -666,18 +580,46 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
     }
 
     if (db) {
-      await db.ref(`students/${student_id}`).update(studentData);
+      await db.ref(`students/${student_id}`).set(studentData);
     } else {
       mockData.students[student_id] = studentData;
     }
-    res.redirect("/students?success=Student updated successfully!");
+    return res.redirect("/students?success=Student updated successfully!");
   } catch (error) {
     console.error("Error updating student:", error);
-    res.redirect(
-      `/students?error=${encodeURIComponent(
-        "Failed to update student: " + error.message
-      )}`
-    );
+    return res.redirect(`/students?error=${encodeURIComponent("Failed to update student: " + error.message)}`);
+  }
+});
+
+app.delete("/students/:student_id", isAuthenticated, async (req, res) => {
+  const { student_id } = req.params;
+  try {
+    const studentData = db ? (await db.ref(`students/${student_id}`).once("value")).val() : mockData.students[student_id];
+    if (!studentData) {
+      return res.status(404).json({ status: "error", message: "Student not found." });
+    }
+
+    if (studentData.face_image) {
+      try {
+        if (storage) {
+          await storage.file(studentData.face_image).delete();
+        } else {
+          await fs.unlink(path.join(__dirname, "public", studentData.face_image));
+        }
+      } catch (err) {
+        console.warn(`Could not delete image for ${student_id}:`, err.message);
+      }
+    }
+
+    if (db) {
+      await db.ref(`students/${student_id}`).remove();
+    } else {
+      delete mockData.students[student_id];
+    }
+    res.status(200).json({ status: "success", message: "Student deleted successfully." });
+  } catch (error) {
+    console.error("Error deleting student:", error);
+    res.status(500).json({ status: "error", message: "Failed to delete student: " + error.message });
   }
 });
 

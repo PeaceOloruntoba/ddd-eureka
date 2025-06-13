@@ -1,194 +1,204 @@
-<%
-  const pageBody = `
-    <div class="p-6 w-screen">
-      <div class="flex items-center justify-between mb-4">
-        <h1 class="text-3xl font-bold text-blue-600">
-            ${title}
-            ${course ? ` <span class="text-xl text-gray-600">(${course})</span>` : ''}
-        </h1>
-        <div>
-          <button class="bg-blue-600 px-4 py-1 text-white font-semibold rounded-lg" onclick="document.getElementById('addStudentForm').classList.toggle('hidden'); document.getElementById('uploadXlsxForm').classList.add('hidden');">Add Student</button>
-          <button class="bg-green-600 px-4 py-1 text-white font-semibold rounded-lg" onclick="document.getElementById('uploadXlsxForm').classList.toggle('hidden'); document.getElementById('addStudentForm').classList.add('hidden');">Upload XLSX</button>
-        </div>
+<% const pageBody = `
+<div class="p-6 w-screen">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-3xl font-bold text-blue-600">
+      ${title}
+      ${course ? `<span class="text-xl text-gray-600">(${course})</span>` : ''}
+    </h1>
+    <div>
+      <button class="bg-blue-600 px-4 py-1 text-white font-semibold rounded-lg" onclick="toggleForm('addStudentForm', 'uploadXlsxForm')">Add Student</button>
+      <button class="bg-green-600 px-4 py-1 text-white font-semibold rounded-lg" onclick="toggleForm('uploadXlsxForm', 'addStudentForm')">Upload XLSX</button>
+    </div>
+  </div>
+
+  ${!course ? `<p class="text-red-500 font-bold mb-4">Please select a course from the Profile menu to manage students for it.</p>` : ''}
+
+  <div id="addStudentForm" class="hidden mb-4 p-4 border rounded-lg bg-white">
+    <h2 class="text-xl font-semibold mb-2">Add New Student</h2>
+    <form action="/students" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+      <input type="text" name="name" placeholder="Name" class="border p-2 rounded" required>
+      <input type="text" name="matric_no" placeholder="Matric No" class="border p-2 rounded" required>
+      <input type="text" name="department" placeholder="Department" class="border p-2 rounded" required>
+      <input type="text" name="level" placeholder="Level" class="border p-2 rounded" required>
+      <label for="course_to_add_student" class="text-gray-700">Assign to Course:</label>
+      <select name="course_to_add_student" class="border p-2 rounded" required>
+        ${session.courses && Array.isArray(session.courses) && session.courses.length > 0 ?
+          session.courses.map(c => `<option value="${c}" ${c === course ? 'selected' : ''}>${c}</option>`).join('')
+          : '<option value="" disabled>No courses available</option>'
+        }
+      </select>
+      <label for="face_image" class="text-gray-700">Student Face Image (JPEG/PNG):</label>
+      <input type="file" name="face_image" accept="image/jpeg,image/png" class="border p-2 rounded">
+      <button type="submit" class="bg-blue-600 text-white py-2 rounded">Submit</button>
+    </form>
+  </div>
+
+  <div id="uploadXlsxForm" class="hidden mb-4 p-4 border rounded-lg bg-white">
+    <h2 class="text-xl font-semibold mb-2">Upload Students via XLSX</h2>
+    <p class="text-sm text-gray-600 mb-2">Expected columns: Name, Matric No, Department, Level. Face images must be added via 'Edit Student'.</p>
+    <form action="/students" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+      <input type="file" name="file" accept=".xlsx" class="border p-2 rounded" required>
+      <label for="course_to_upload_students" class="text-gray-700">Assign uploaded students to Course:</label>
+      <select name="course_to_upload_students" class="border p-2 rounded" required>
+        ${session.courses && Array.isArray(session.courses) && session.courses.length > 0 ?
+          session.courses.map(c => `<option value="${c}" ${c === course ? 'selected' : ''}>${c}</option>`).join('')
+          : '<option value="" disabled>No courses available</option>'
+        }
+      </select>
+      <button type="submit" class="bg-green-600 text-white py-2 rounded">Upload</button>
+    </form>
+  </div>
+
+  <div class="w-full flex flex-col items-center justify-center gap-4">
+    <div class="flex items-center justify-between w-full">
+      <input type="search" placeholder="Search by Name or Matric No..." class="w-md bg-transparent border border-gray-500 focus:outline-none p-2 rounded" onkeyup="searchStudents(this.value)">
+      <div class="flex items-center gap-2 text-md">
+        <button class="border border-black p-1 rounded" onclick="window.location.href='/generate_report/${course}'" ${!course ? 'disabled' : ''}>Export Report</button>
       </div>
-
-      ${!course ? `<p class="text-red-500 font-bold mb-4">Please select a course from the Profile menu to manage students for it.</p>` : ''}
-
-
-      <div id="addStudentForm" class="hidden mb-4 p-4 border rounded-lg bg-white">
-        <h2 class="text-xl font-semibold mb-2">Add New Student</h2>
-        <form action="/students" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
-          <input type="text" name="name" placeholder="Name" class="border p-2 rounded" required>
-          <input type="text" name="matric_no" placeholder="Matric No" class="border p-2 rounded" required>
-          <input type="text" name="department" placeholder="Department" class="border p-2 rounded" required>
-          <input type="text" name="level" placeholder="Level" class="border p-2 rounded" required>
-          <label for="course_to_add_student" class="text-gray-700">Assign to Course:</label>
-          <select name="course_to_add_student" class="border p-2 rounded" required>
-            ${session.courses && Array.isArray(session.courses) && session.courses.length > 0 ?
-              session.courses.map(c => `<option value="${c}" ${c === course ? 'selected' : ''}>${c}</option>`).join('')
-              : '<option value="" disabled>No courses available</option>'
-            }
-          </select>
-          <label for="face_image" class="text-gray-700">Student Face Image (JPEG/PNG):</label>
-          <input type="file" name="face_image" accept="image/jpeg,image/png" class="border p-2 rounded" required>
-          <button type="submit" class="bg-blue-600 text-white py-2 rounded">Submit</button>
-        </form>
-      </div>
-
-      <div id="uploadXlsxForm" class="hidden mb-4 p-4 border rounded-lg bg-white">
-        <h2 class="text-xl font-semibold mb-2">Upload Students via XLSX</h2>
-        <p class="text-sm text-gray-600 mb-2">Expected columns in XLSX: Name, Matric No, Department, Level. Images must be added separately via 'Edit Student'.</p>
-        <form action="/students" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
-          <input type="file" name="file" accept=".xlsx" class="border p-2 rounded" required>
-          <label for="course_to_upload_students" class="text-gray-700">Assign uploaded students to Course:</label>
-          <select name="course_to_upload_students" class="border p-2 rounded" required>
-            ${session.courses && Array.isArray(session.courses) && session.courses.length > 0 ?
-              session.courses.map(c => `<option value="${c}" ${c === course ? 'selected' : ''}>${c}</option>`).join('')
-              : '<option value="" disabled>No courses available</option>'
-            }
-          </select>
-          <button type="submit" class="bg-green-600 text-white py-2 rounded">Upload</button>
-        </form>
-      </div>
-
-      <div class="w-full flex flex-col items-center justify-center gap-4">
-        <div class="flex items-center justify-between w-full">
-          <input type="search" placeholder="Search by Name or Matric No..." class="w-md bg-transparent border border-gray-500 focus:outline-none p-2 rounded" onkeyup="searchStudents(this.value)">
-          <div class="flex items-center gap-2 text-md">
-            <button class="border border-black p-1 rounded" onclick="window.location.href='/generate_report/${course}'" ${!course ? 'disabled' : ''}>Export Report</button>
-          </div>
-        </div>
-        <table class="w-full rounded-xl border" id="studentsTable">
-          <thead class="w-full text-left">
-            <tr class="w-full bg-gray-200">
-              <th class="p-2">S/N</th>
-              <th>Name</th>
-              <th>Matric No</th>
-              <th>Department</th>
-              <th>Level</th>
-              <th>Courses</th>
-              <th>Action</th>
+    </div>
+    <table class="w-full rounded-xl border" id="studentsTable">
+      <thead class="w-full text-left">
+        <tr class="w-full bg-gray-200">
+          <th class="p-2">S/N</th>
+          <th>Name</th>
+          <th>Matric No</th>
+          <th>Department</th>
+          <th>Level</th>
+          <th>Courses</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${Object.keys(students).length > 0 ?
+          Object.entries(students).filter(([id, student]) => student.courses && student.courses.includes(course)).map(([student_id, student], index) => `
+            <tr class="border-b py-4">
+              <td class="p-2">${index + 1}</td>
+              <td>${student.name}</td>
+              <td>${student.matric_no}</td>
+              <td>${student.department}</td>
+              <td>${student.level}</td>
+              <td>${student.courses ? student.courses.join(', ') : 'N/A'}</td>
+              <td>
+                <button class="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" onclick="openEditStudentModal('${student_id}', '${encodeURIComponent(JSON.stringify(student))}')">E</button>
+                <button class="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm ml-1" onclick="deleteStudent('${student_id}')">X</button>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            ${Object.keys(students).length > 0 ?
-              Object.entries(students).filter(([id, student]) => student.courses && student.courses.includes(course)).map(([student_id, student]) => `
-                <tr class="border-b py-4">
-                  <td class="p-2"></td>
-                  <td>${student.name}</td>
-                  <td>${student.matric_no}</td>
-                  <td>${student.department}</td>
-                  <td>${student.level}</td>
-                  <td>${student.courses ? student.courses.join(', ') : 'N/A'}</td>
-                  <td>
-                    <button class="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" onclick="openEditStudentModal('${student_id}', '${encodeURIComponent(JSON.stringify(student))}')">E</button>
-                    <button class="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm ml-1" onclick="deleteStudent('${student_id}')">X</button>
-                  </td>
-                </tr>
-              `).join('')
-              : `<tr><td colspan="7" class="text-center p-4 text-gray-500">No students found for this course.</td></tr>`
-            }
-          </tbody>
-        </table>
-      </div>
+          `).join('')
+          : `<tr><td colspan="7" class="text-center p-4 text-gray-500">No students found for this course.</td></tr>`
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div id="editStudentModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+      <h2 class="text-xl font-bold mb-4">Edit Student</h2>
+      <form id="editStudentForm" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+        <input type="hidden" id="edit_student_id" name="student_id">
+        <label for="edit_name">Name:</label>
+        <input type="text" id="edit_name" name="name" class="border p-2 rounded" required>
+        <label for="edit_matric_no">Matric No:</label>
+        <input type="text" id="edit_matric_no" name="matric_no" class="border p-2 rounded" required readonly>
+        <label for="edit_department">Department:</label>
+        <input type="text" id="edit_department" name="department" class="border p-2 rounded" required>
+        <label for="edit_level">Level:</label>
+        <input type="text" id="edit_level" name="level" class="border p-2 rounded" required>
+        <label for="edit_courses">Courses (comma-separated):</label>
+        <input type="text" id="edit_courses" name="courses" class="border p-2 rounded" placeholder="e.g., CS101, MTH202">
+        <label for="edit_face_image">Update Face Image (JPEG/PNG, optional):</label>
+        <input type="file" id="edit_face_image" name="face_image" accept="image/jpeg,image/png" class="border p-2 rounded">
+        <div class="flex justify-end gap-2 mt-4">
+          <button type="button" onclick="document.getElementById('editStudentModal').classList.add('hidden')" class="bg-gray-400 text-white py-2 px-4 rounded">Cancel</button>
+          <button type="submit" class="bg-blue-600 text-white py-2 px-4 rounded">Save Changes</button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <div id="editStudentModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-        <h2 class="text-xl font-bold mb-4">Edit Student</h2>
-        <form id="editStudentForm" action="" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
-          <input type="hidden" id="edit_student_id" name="student_id">
-          <label for="edit_name">Name:</label>
-          <input type="text" id="edit_name" name="name" class="border p-2 rounded" required>
-          <label for="edit_matric_no">Matric No:</label>
-          <input type="text" id="edit_matric_no" name="matric_no" class="border p-2 rounded" required readonly>
-          <label for="edit_department">Department:</label>
-          <input type="text" id="edit_department" name="department" class="border p-2 rounded" required>
-          <label for="edit_level">Level:</label>
-          <input type="text" id="edit_level" name="level" class="border p-2 rounded" required>
-          <label for="edit_courses">Courses (comma-separated):</label>
-          <input type="text" id="edit_courses" name="courses" class="border p-2 rounded" placeholder="e.g., CS101, MTH202">
-          <label for="edit_face_image">Update Face Image (JPEG/PNG, optional):</label>
-          <input type="file" id="edit_face_image" name="face_image" accept="image/jpeg,image/png" class="border p-2 rounded">
-          <div class="flex justify-end gap-2 mt-4">
-            <button type="button" onclick="document.getElementById('editStudentModal').classList.add('hidden')" class="bg-gray-400 text-white py-2 px-4 rounded">Cancel</button>
-            <button type="submit" class="bg-blue-600 text-white py-2 px-4 rounded">Save Changes</button>
-          </div>
-        </form>
-      </div>
-    </div>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    function toggleForm(showId, hideId) {
+      document.getElementById(showId).classList.toggle('hidden');
+      document.getElementById(hideId).classList.add('hidden');
+    }
 
-    <script>
-      function updateSNForStudents() {
-        const table = document.getElementById('studentsTable');
-        if (!table) return;
-        const rows = table.querySelectorAll('tbody tr:not([style*="display: none"])');
-        rows.forEach((row, index) => {
-          const snCell = row.querySelector('td:first-child');
-          if (snCell) snCell.textContent = index + 1;
-        });
-      }
+    function updateSNForStudents() {
+      const table = document.getElementById('studentsTable');
+      if (!table) return;
+      const rows = table.querySelectorAll('tbody tr:not([style*="display: none"])');
+      rows.forEach((row, index) => {
+        const snCell = row.querySelector('td:first-child');
+        if (snCell) snCell.textContent = index + 1;
+      });
+    }
 
-      // function deleteStudent(student_id) {
-      //   if (confirm("Are you sure you want to delete this student profile? Their attendance records will remain.")) {
-      //     fetch(\`/students/\${student_id}\`, { method: "DELETE" })
-      //       .then(response => {
-      //         if (response.ok) {
-      //           location.reload();
-      //         } else {
-      //           alert('Failed to delete student.');
-      //         }
-      //       })
-      //       .catch(error => console.error('Error deleting student:', error));
-      //   }
-      // }
-
-      function openEditStudentModal(student_id, studentJson) {
-        const student = JSON.parse(decodeURIComponent(studentJson));
-        document.getElementById('edit_student_id').value = student_id;
-        document.getElementById('edit_name').value = student.name || '';
-        document.getElementById('edit_matric_no').value = student.matric_no || student_id;
-        document.getElementById('edit_department').value = student.department || '';
-        document.getElementById('edit_level').value = student.level || '';
-        document.getElementById('edit_courses').value = student.courses ? student.courses.join(', ') : '';
-        // document.getElementById('editStudentForm').action = \`/students/\${student_id}\`; 
-        document.getElementById('editStudentModal').classList.remove('hidden');
-      }
-
-      function searchStudents(query) {
-        const table = document.getElementById('studentsTable');
-        const rows = table.querySelectorAll('tbody tr');
-        query = query.toLowerCase();
-
-        rows.forEach(row => {
-          const name = row.children[1].textContent.toLowerCase();
-          const matricNo = row.children[2].textContent.toLowerCase();
-          if (name.includes(query) || matricNo.includes(query)) {
-            row.style.display = '';
-          } else {
-            row.style.display = 'none';
-          }
-        });
-        updateSNForStudents(); // Recalculate S/N after search
-      }
-
-      // Initial S/N update when page loads
-      document.addEventListener('DOMContentLoaded', () => {
-        updateSNForStudents();
-        // Check for success/error messages in URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        const successMessage = urlParams.get('success');
-        const errorMessage = urlParams.get('error');
-        if (successMessage) {
-            alert(successMessage);
-            // Optionally remove the param from URL
-            history.replaceState({}, document.title, window.location.pathname);
-        } else if (errorMessage) {
-            alert(errorMessage);
-            history.replaceState({}, document.title, window.location.pathname);
+    function deleteStudent(student_id) {
+      window.Swal.fire({
+        title: 'Are you sure?',
+        text: 'This will delete the student profile. Attendance records will remain.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          window.fetch('/students/' + student_id, { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+              if (data.status === 'success') {
+                window.Swal.fire('Deleted!', data.message, 'success').then(() => window.location.reload());
+              } else {
+                window.Swal.fire('Error!', data.message, 'error');
+              }
+            })
+            .catch(error => {
+              console.error('Error deleting student:', error);
+              window.Swal.fire('Error!', 'Failed to delete student.', 'error');
+            });
         }
       });
-    </script>
-  `;
+    }
+
+    function openEditStudentModal(student_id, studentJson) {
+      const student = JSON.parse(decodeURIComponent(studentJson));
+      const form = document.getElementById('editStudentForm');
+      document.getElementById('edit_student_id').value = student_id;
+      document.getElementById('edit_name').value = student.name || '';
+      document.getElementById('edit_matric_no').value = student.matric_no || student_id;
+      document.getElementById('edit_department').value = student.department || '';
+      document.getElementById('edit_level').value = student.level || '';
+      document.getElementById('edit_courses').value = student.courses ? student.courses.join(', ') : '';
+      form.action = '/students/' + student_id;
+      document.getElementById('editStudentModal').classList.remove('hidden');
+    }
+
+    function searchStudents(query) {
+      const table = document.getElementById('studentsTable');
+      const rows = table.querySelectorAll('tbody tr');
+      query = query.toLowerCase();
+      rows.forEach(row => {
+        const name = row.children[1].textContent.toLowerCase();
+        const matricNo = row.children[2].textContent.toLowerCase();
+        row.style.display = name.includes(query) || matricNo.includes(query) ? '' : 'none';
+      });
+      updateSNForStudents();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      updateSNForStudents();
+      const urlParams = new URLSearchParams(window.location.search);
+      const successMessage = urlParams.get('success');
+      const errorMessage = urlParams.get('error');
+      if (successMessage) {
+        window.Swal.fire('Success!', successMessage, 'success');
+        history.replaceState({}, document.title, window.location.pathname);
+      } else if (errorMessage) {
+        window.Swal.fire('Error!', errorMessage, 'error');
+        history.replaceState({}, document.title, window.location.pathname);
+      }
+    });
+  </script>
+</div>
+`;
 %>
 <%- include('base', { title: title, course: course, session: session, students: students, body: pageBody }) %>
