@@ -24,15 +24,61 @@ const serviceAccount = JSON.parse(
 
 const app = express();
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://attendance-e75b0-default-rtdb.firebaseio.com/",
-  storageBucket: "attendance-e75b0.appspot.com",
-});
-const db = getDatabase();
-const storage = getStorage().bucket();
-const auth = getAuth();
+// Firebase Admin SDK Initialization
+let db, storage, auth;
+try {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL:
+      "https://attendance-e75b0-default-rtdb.<region>.firebasedatabase.app/", // Replace <region>
+    storageBucket: "attendance-e75b0.appspot.com",
+  });
+  db = getDatabase();
+  storage = getStorage().bucket();
+  auth = getAuth();
+  console.log("Firebase initialized successfully");
+} catch (error) {
+  console.error("Firebase initialization failed:", error.message);
+}
 
+// Mock data store (for fallback)
+let mockData = {
+  lecturers: {
+    "mock-lecturer-uid": {
+      email: "lecturer@example.com",
+      courses: ["CS101", "MTH202", "PHY303"],
+    },
+  },
+  students: {
+    S001: {
+      name: "John Doe",
+      matric_no: "S001",
+      department: "Computer Science",
+      level: "200",
+      courses: ["CS101"],
+      face_image: "faces/S001.jpg",
+    },
+    S002: {
+      name: "Jane Smith",
+      matric_no: "S002",
+      department: "Mathematics",
+      level: "300",
+      courses: ["MTH202"],
+      face_image: "faces/S002.jpg",
+    },
+  },
+  attendance: {
+    S001: {
+      "-M123": {
+        date: "2025-06-13T10:00:00Z",
+        course: "CS101",
+        lecturerId: "mock-lecturer-uid",
+      },
+    },
+  },
+};
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -50,21 +96,22 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
 app.locals.firebaseClientConfig = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.AUTH_DOMAIN,
-  projectId: process.env.PROJECT_ID,
-  storageBucket: process.env.STORAGE_BUCKET,
-  messagingSenderId: process.env.MESSAGING_SENDER_ID,
-  appId: process.env.APP_ID,
-  measurementId: process.env.MEASUREMENT_ID,
+  apiKey: process.env.FIREBASE_API_KEY || "mock-api-key",
+  authDomain: process.env.AUTH_DOMAIN || "mock-auth-domain",
+  projectId: process.env.PROJECT_ID || "mock-project-id",
+  storageBucket: process.env.STORAGE_BUCKET || "mock-storage-bucket",
+  messagingSenderId: process.env.MESSAGING_SENDER_ID || "mock-sender-id",
+  appId: process.env.APP_ID || "mock-app-id",
+  measurementId: process.env.MEASUREMENT_ID || "mock-measurement-id",
 };
 
+// Session validation middleware
 app.use(async (req, res, next) => {
   if (req.session.user) {
     try {
-      const lecturerRef = db.ref(`lecturers/${req.session.user}`);
-      const lecturerSnapshot = await lecturerRef.once("value");
-      const lecturerData = lecturerSnapshot.val();
+      const lecturerData = db
+        ? (await db.ref(`lecturers/${req.session.user}`).once("value")).val()
+        : mockData.lecturers[req.session.user];
 
       if (lecturerData) {
         req.session.courses = lecturerData.courses || [];
@@ -100,6 +147,7 @@ const isAuthenticated = (req, res, next) => {
   res.redirect("/login");
 };
 
+// Routes
 app.get("/", isAuthenticated, (req, res) => {
   res.render("index", {
     title: "Real-time Attendance",
@@ -123,10 +171,11 @@ app.post("/login", async (req, res) => {
   console.log("Login attempt:", req.body);
   const { idToken } = req.body;
   try {
+    if (!auth) throw new Error("Firebase Auth not initialized");
     const decodedToken = await auth.verifyIdToken(idToken);
-    const lecturerData = (
-      await db.ref(`lecturers/${decodedToken.uid}`).once("value")
-    ).val();
+    const lecturerData = db
+      ? (await db.ref(`lecturers/${decodedToken.uid}`).once("value")).val()
+      : mockData.lecturers[decodedToken.uid];
 
     if (!lecturerData) {
       throw new Error("Lecturer profile not found. Please register.");
@@ -157,6 +206,7 @@ app.post("/register", async (req, res) => {
   console.log("Register attempt:", req.body);
   const { idToken, courses } = req.body;
   try {
+    if (!auth) throw new Error("Firebase Auth not initialized");
     const decodedToken = await auth.verifyIdToken(idToken);
     const lecturerUid = decodedToken.uid;
     const lecturerEmail = decodedToken.email;
@@ -164,24 +214,38 @@ app.post("/register", async (req, res) => {
     const parsedCourses = courses
       ? courses
           .split(",")
-          .map((c) => c.trim())
+          .map((c) => c.trim().toUpperCase())
           .filter((c) => c)
       : [];
 
-    const existingLecturer = (
-      await db.ref(`lecturers/${lecturerUid}`).once("value")
-    ).val();
+    const existingLecturer = db
+      ? (await db.ref(`lecturers/${lecturerUid}`).once("value")).val()
+      : mockData.lecturers[lecturerUid];
+
     if (existingLecturer) {
-      await db.ref(`lecturers/${lecturerUid}`).update({
-        courses: [
-          ...new Set([...(existingLecturer.courses || []), ...parsedCourses]),
-        ],
-      });
+      const updatedCourses = [
+        ...new Set([...(existingLecturer.courses || []), ...parsedCourses]),
+      ];
+      if (db) {
+        await db.ref(`lecturers/${lecturerUid}`).update({
+          courses: updatedCourses,
+        });
+      } else {
+        mockData.lecturers[lecturerUid] = {
+          email: lecturerEmail,
+          courses: updatedCourses,
+        };
+      }
     } else {
-      await db.ref(`lecturers/${lecturerUid}`).set({
+      const lecturerData = {
         email: lecturerEmail,
         courses: parsedCourses,
-      });
+      };
+      if (db) {
+        await db.ref(`lecturers/${lecturerUid}`).set(lecturerData);
+      } else {
+        mockData.lecturers[lecturerUid] = lecturerData;
+      }
     }
 
     req.session.user = lecturerUid;
@@ -228,15 +292,14 @@ app.post("/stream", isAuthenticated, async (req, res) => {
   if (!currentCourse) {
     return res.json({
       status: "error",
-      message:
-        "No course selected. Please select a course from the profile menu.",
+      message: "No course selected.",
     });
   }
 
   try {
-    const studentRef = db.ref(`students/${student_id}`);
-    const studentSnapshot = await studentRef.once("value");
-    const student = studentSnapshot.val();
+    const student = db
+      ? (await db.ref(`students/${student_id}`).once("value")).val()
+      : mockData.students[student_id];
 
     if (!student) {
       return res.json({
@@ -253,19 +316,15 @@ app.post("/stream", isAuthenticated, async (req, res) => {
     }
 
     const today = new Date().toISOString().split("T")[0];
-    const attendanceRef = db.ref(`attendance/${student_id}`);
-    const attendanceSnapshot = await attendanceRef.once("value");
-    const records = attendanceSnapshot.val();
+    let attendance = db
+      ? (await db.ref(`attendance/${student_id}`).once("value")).val() || {}
+      : mockData.attendance[student_id] || {};
 
-    let alreadyMarkedToday = false;
-    for (const recordId in records) {
-      const record = records[recordId];
-      const recordDate = new Date(record.date).toISOString().split("T")[0];
-      if (recordDate === today && record.course === currentCourse) {
-        alreadyMarkedToday = true;
-        break;
-      }
-    }
+    let alreadyMarkedToday = Object.values(attendance).some(
+      (record) =>
+        new Date(record.date).toISOString().split("T")[0] === today &&
+        record.course === currentCourse
+    );
 
     if (alreadyMarkedToday) {
       return res.json({
@@ -276,11 +335,18 @@ app.post("/stream", isAuthenticated, async (req, res) => {
       });
     }
 
-    await attendanceRef.push({
+    const newRecordId = `-${Math.random().toString(36).substr(2, 9)}`;
+    attendance[newRecordId] = {
       date: new Date().toISOString(),
       course: currentCourse,
       lecturerId: lecturerId,
-    });
+    };
+
+    if (db) {
+      await db.ref(`attendance/${student_id}`).set(attendance);
+    } else {
+      mockData.attendance[student_id] = attendance;
+    }
 
     res.json({
       status: "success",
@@ -295,17 +361,36 @@ app.post("/stream", isAuthenticated, async (req, res) => {
 });
 
 app.get("/attendance", isAuthenticated, async (req, res) => {
-  const attendanceSnapshot = await db.ref("attendance").once("value");
-  const studentsSnapshot = await db.ref("students").once("value");
+  const { course } = req.query;
+  let attendance = db
+    ? (await db.ref("attendance").once("value")).val() || {}
+    : mockData.attendance;
+  const students = db
+    ? (await db.ref("students").once("value")).val() || {}
+    : mockData.students;
 
-  const attendance = attendanceSnapshot.val() || {};
-  const students = studentsSnapshot.val() || {};
+  if (course) {
+    const filteredAttendance = {};
+    for (const student_id in attendance) {
+      filteredAttendance[student_id] = {};
+      for (const record_id in attendance[student_id]) {
+        if (attendance[student_id][record_id].course === course) {
+          filteredAttendance[student_id][record_id] =
+            attendance[student_id][record_id];
+        }
+      }
+      if (Object.keys(filteredAttendance[student_id]).length === 0) {
+        delete filteredAttendance[student_id];
+      }
+    }
+    attendance = filteredAttendance;
+  }
 
   res.render("attendance", {
     title: "Attendance History",
-    attendance: attendance,
-    students: students,
-    course: req.session.current_course || "N/A",
+    attendance,
+    students,
+    course: course || req.session.current_course || "N/A",
     session: req.session,
   });
 });
@@ -316,27 +401,34 @@ app.delete(
   async (req, res) => {
     const { student_id, record_id } = req.params;
     try {
-      await db.ref(`attendance/${student_id}/${record_id}`).remove();
+      if (db) {
+        await db.ref(`attendance/${student_id}/${record_id}`).remove();
+      } else {
+        delete mockData.attendance[student_id][record_id];
+      }
       res
         .status(200)
         .json({ status: "success", message: "Attendance record deleted." });
     } catch (error) {
       console.error("Error deleting attendance record:", error);
-      res.status(500).json({
-        status: "error",
-        message: "Failed to delete attendance record.",
-      });
+      res
+        .status(500)
+        .json({
+          status: "error",
+          message: "Failed to delete attendance record.",
+        });
     }
   }
 );
 
 app.get("/students", isAuthenticated, async (req, res) => {
-  const studentsSnapshot = await db.ref("students").once("value");
-  const students = studentsSnapshot.val() || {};
+  const students = db
+    ? (await db.ref("students").once("value")).val() || {}
+    : mockData.students;
 
   res.render("students", {
     title: "Manage Students",
-    students: students,
+    students,
     course: req.session.current_course || "N/A",
     session: req.session,
   });
@@ -346,9 +438,7 @@ app.post("/students", isAuthenticated, async (req, res) => {
   const currentCourse = req.session.current_course;
   if (!currentCourse) {
     return res.redirect(
-      `/students?error=${encodeURIComponent(
-        "No course selected. Please select a course from the profile menu to add/upload students."
-      )}`
+      `/students?error=${encodeURIComponent("No course selected.")}`
     );
   }
 
@@ -381,7 +471,7 @@ app.post("/students", isAuthenticated, async (req, res) => {
 
         if (name && matric_no && department && level) {
           const student_id = matric_no.toString().trim();
-          studentUpdates[`students/${student_id}`] = {
+          studentUpdates[student_id] = {
             name,
             matric_no: student_id,
             department,
@@ -390,29 +480,22 @@ app.post("/students", isAuthenticated, async (req, res) => {
         }
       });
 
-      const studentIdsToUpdate = Object.keys(studentUpdates).map(
-        (path) => path.split("/")[1]
-      );
-      const existingStudentsSnapshot = await db.ref("students").once("value");
-      const existingStudents = existingStudentsSnapshot.val() || {};
-
-      const finalUpdates = {};
-      for (const studentPath in studentUpdates) {
-        const student_id = studentPath.split("/")[1];
-        const newStudentData = studentUpdates[studentPath];
-        const existingStudent = existingStudents[student_id];
-
-        let courses =
-          existingStudent && existingStudent.courses
-            ? existingStudent.courses
-            : [];
+      for (const student_id in studentUpdates) {
+        const newStudentData = studentUpdates[student_id];
+        const existingStudent = db
+          ? (await db.ref(`students/${student_id}`).once("value")).val() || {}
+          : mockData.students[student_id] || {};
+        let courses = existingStudent.courses || [];
         if (!courses.includes(courseToAssign)) {
           courses.push(courseToAssign);
         }
-        finalUpdates[studentPath] = { ...newStudentData, courses };
+        const studentData = { ...newStudentData, courses };
+        if (db) {
+          await db.ref(`students/${student_id}`).set(studentData);
+        } else {
+          mockData.students[student_id] = studentData;
+        }
       }
-
-      await db.ref().update(finalUpdates);
 
       return res.redirect(
         "/students?success=Students from XLSX uploaded successfully!"
@@ -440,14 +523,10 @@ app.post("/students", isAuthenticated, async (req, res) => {
     }
 
     try {
-      const studentRef = db.ref(`students/${student_id}`);
-      const existingStudentSnapshot = await studentRef.once("value");
-      const existingStudent = existingStudentSnapshot.val();
-
-      let courses =
-        existingStudent && existingStudent.courses
-          ? existingStudent.courses
-          : [];
+      const existingStudent = db
+        ? (await db.ref(`students/${student_id}`).once("value")).val()
+        : mockData.students[student_id];
+      let courses = existingStudent ? existingStudent.courses || [] : [];
       if (!courses.includes(assignedCourse)) {
         courses.push(assignedCourse);
       }
@@ -463,15 +542,30 @@ app.post("/students", isAuthenticated, async (req, res) => {
       if (req.files && req.files.face_image) {
         const file = req.files.face_image;
         const filePath = `faces/${student_id}.jpg`;
-        await storage
-          .file(filePath)
-          .save(file.data, { contentType: file.mimetype });
-        studentData.face_image = filePath;
+        try {
+          if (storage) {
+            await storage.file(filePath).save(file.data, {
+              contentType: file.mimetype,
+            });
+          } else {
+            await fs.writeFile(
+              path.join(__dirname, "public", filePath),
+              file.data
+            );
+          }
+          studentData.face_image = filePath;
+        } catch (error) {
+          console.warn("Failed to save face image:", error.message);
+        }
       } else if (existingStudent && existingStudent.face_image) {
         studentData.face_image = existingStudent.face_image;
       }
 
-      await db.ref(`students/${student_id}`).set(studentData);
+      if (db) {
+        await db.ref(`students/${student_id}`).set(studentData);
+      } else {
+        mockData.students[student_id] = studentData;
+      }
       return res.redirect("/students?success=Student added successfully!");
     } catch (error) {
       console.error("Error adding student:", error);
@@ -488,26 +582,30 @@ app.post("/students", isAuthenticated, async (req, res) => {
 app.delete("/students/:student_id", isAuthenticated, async (req, res) => {
   const { student_id } = req.params;
   try {
-    const studentRef = db.ref(`students/${student_id}`);
-    const studentSnapshot = await studentRef.once("value");
-    const studentData = studentSnapshot.val();
-
+    const studentData = db
+      ? (await db.ref(`students/${student_id}`).once("value")).val()
+      : mockData.students[student_id];
     if (studentData && studentData.face_image) {
-      await storage
-        .file(studentData.face_image)
-        .delete()
-        .catch((err) => {
-          console.warn(
-            `Could not delete image for ${student_id}:`,
-            err.message
+      try {
+        if (storage) {
+          await storage.file(studentData.face_image).delete();
+        } else {
+          await fs.unlink(
+            path.join(__dirname, "public", studentData.face_image)
           );
-        });
+        }
+      } catch (err) {
+        console.warn(`Could not delete image for ${student_id}:`, err.message);
+      }
     }
-    await studentRef.remove();
-    res.status(200).json({
-      status: "success",
-      message: "Student profile deleted (attendance records remain).",
-    });
+    if (db) {
+      await db.ref(`students/${student_id}`).remove();
+    } else {
+      delete mockData.students[student_id];
+    }
+    res
+      .status(200)
+      .json({ status: "success", message: "Student profile deleted." });
   } catch (error) {
     console.error("Error deleting student:", error);
     res
@@ -521,10 +619,9 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
   const { name, department, level, courses } = req.body;
 
   try {
-    const studentRef = db.ref(`students/${student_id}`);
-    const existingStudentSnapshot = await studentRef.once("value");
-    const existingStudent = existingStudentSnapshot.val();
-
+    const existingStudent = db
+      ? (await db.ref(`students/${student_id}`).once("value")).val()
+      : mockData.students[student_id];
     if (!existingStudent) {
       return res.redirect(
         `/students?error=${encodeURIComponent(
@@ -536,7 +633,7 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
     let updatedCourses = courses
       ? courses
           .split(",")
-          .map((c) => c.trim())
+          .map((c) => c.trim().toUpperCase())
           .filter((c) => c)
       : [];
 
@@ -551,15 +648,30 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
     if (req.files && req.files.face_image) {
       const file = req.files.face_image;
       const filePath = `faces/${student_id}.jpg`;
-      await storage
-        .file(filePath)
-        .save(file.data, { contentType: file.mimetype });
-      studentData.face_image = filePath;
+      try {
+        if (storage) {
+          await storage.file(filePath).save(file.data, {
+            contentType: file.mimetype,
+          });
+        } else {
+          await fs.writeFile(
+            path.join(__dirname, "public", filePath),
+            file.data
+          );
+        }
+        studentData.face_image = filePath;
+      } catch (error) {
+        console.warn("Failed to save face image:", error.message);
+      }
     } else if (existingStudent.face_image) {
       studentData.face_image = existingStudent.face_image;
     }
 
-    await studentRef.update(studentData);
+    if (db) {
+      await db.ref(`students/${student_id}`).update(studentData);
+    } else {
+      mockData.students[student_id] = studentData;
+    }
     res.redirect("/students?success=Student updated successfully!");
   } catch (error) {
     console.error("Error updating student:", error);
@@ -573,18 +685,23 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
 
 app.get("/students_data", isAuthenticated, async (req, res) => {
   try {
-    const studentsSnapshot = await db.ref("students").once("value");
-    const students = studentsSnapshot.val() || {};
-
+    const students = db
+      ? (await db.ref("students").once("value")).val() || {}
+      : mockData.students;
     const studentsWithSignedUrls = {};
     for (const studentId in students) {
       const student = students[studentId];
       if (student.face_image) {
-        const file = storage.file(student.face_image);
-        const [url] = await file.getSignedUrl({
-          action: "read",
-          expires: Date.now() + 60 * 60 * 1000,
-        });
+        let url;
+        if (storage) {
+          const file = storage.file(student.face_image);
+          [url] = await file.getSignedUrl({
+            action: "read",
+            expires: Date.now() + 60 * 60 * 1000,
+          });
+        } else {
+          url = `/faces/${studentId}.jpg`;
+        }
         studentsWithSignedUrls[studentId] = { ...student, face_image_url: url };
       } else {
         studentsWithSignedUrls[studentId] = student;
@@ -592,27 +709,29 @@ app.get("/students_data", isAuthenticated, async (req, res) => {
     }
     res.json(studentsWithSignedUrls);
   } catch (error) {
-    console.error("Error fetching students data for ML:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch student data for recognition." });
+    console.error("Error fetching students data:", error);
+    res.status(500).json({ error: "Failed to fetch student data." });
   }
 });
 
 app.get("/dashboard", isAuthenticated, async (req, res) => {
-  const attendanceSnapshot = await db.ref("attendance").once("value");
-  const studentsSnapshot = await db.ref("students").once("value");
+  const attendance = db
+    ? (await db.ref("attendance").once("value")).val() || {}
+    : mockData.attendance;
+  const students = db
+    ? (await db.ref("students").once("value")).val() || {}
+    : mockData.students;
 
   res.render("dashboard", {
     title: "Dashboard",
-    attendance: attendanceSnapshot.val() || {},
-    students: studentsSnapshot.val() || {},
+    attendance,
+    students,
     course: req.session.current_course || "N/A",
     session: req.session,
   });
 });
 
-app.get("/add_courses", isAuthenticated, async (req, res) => {
+app.get("/add_courses", isAuthenticated, (req, res) => {
   res.render("add_courses", {
     title: "Manage My Courses",
     courses: req.session.courses || [],
@@ -639,14 +758,20 @@ app.post("/add_courses", isAuthenticated, async (req, res) => {
   const courseToAdd = new_course.trim().toUpperCase();
 
   try {
-    const lecturerRef = db.ref(`lecturers/${lecturerId}`);
-    const lecturerSnapshot = await lecturerRef.once("value");
-    const lecturerData = lecturerSnapshot.val();
+    const lecturerData = db
+      ? (await db.ref(`lecturers/${lecturerId}`).once("value")).val()
+      : mockData.lecturers[lecturerId];
 
     let currentCourses = lecturerData.courses || [];
     if (!currentCourses.includes(courseToAdd)) {
       currentCourses.push(courseToAdd);
-      await lecturerRef.update({ courses: currentCourses });
+      if (db) {
+        await db
+          .ref(`lecturers/${lecturerId}`)
+          .update({ courses: currentCourses });
+      } else {
+        mockData.lecturers[lecturerId].courses = currentCourses;
+      }
       req.session.courses = currentCourses;
       if (!req.session.current_course) {
         req.session.current_course = courseToAdd;
@@ -684,9 +809,9 @@ app.delete("/courses/:course_code", isAuthenticated, async (req, res) => {
   const lecturerId = req.session.user;
 
   try {
-    const lecturerRef = db.ref(`lecturers/${lecturerId}`);
-    const lecturerSnapshot = await lecturerRef.once("value");
-    const lecturerData = lecturerSnapshot.val();
+    const lecturerData = db
+      ? (await db.ref(`lecturers/${lecturerId}`).once("value")).val()
+      : mockData.lecturers[lecturerId];
 
     let currentCourses = lecturerData.courses || [];
     const updatedCourses = currentCourses.filter((c) => c !== course_code);
@@ -694,10 +819,16 @@ app.delete("/courses/:course_code", isAuthenticated, async (req, res) => {
     if (updatedCourses.length === currentCourses.length) {
       return res
         .status(404)
-        .json({ status: "error", message: "Course not found in your list." });
+        .json({ status: "error", message: "Course not found." });
     }
 
-    await lecturerRef.update({ courses: updatedCourses });
+    if (db) {
+      await db
+        .ref(`lecturers/${lecturerId}`)
+        .update({ courses: updatedCourses });
+    } else {
+      mockData.lecturers[lecturerId].courses = updatedCourses;
+    }
     req.session.courses = updatedCourses;
 
     if (req.session.current_course === course_code) {
@@ -710,10 +841,12 @@ app.delete("/courses/:course_code", isAuthenticated, async (req, res) => {
       .json({ status: "success", message: `Course '${course_code}' removed.` });
   } catch (error) {
     console.error("Error removing course:", error);
-    res.status(500).json({
-      status: "error",
-      message: `Failed to remove course: ${error.message}`,
-    });
+    res
+      .status(500)
+      .json({
+        status: "error",
+        message: `Failed to remove course: ${error.message}`,
+      });
   }
 });
 
@@ -731,12 +864,12 @@ app.get("/generate_report/:courseCode", isAuthenticated, async (req, res) => {
     return res.status(403).send("Unauthorized: You do not manage this course.");
   }
 
-  const [attendanceSnapshot, studentsSnapshot] = await Promise.all([
-    db.ref("attendance").once("value"),
-    db.ref("students").once("value"),
-  ]);
-  const attendance = attendanceSnapshot.val() || {};
-  const students = studentsSnapshot.val() || {};
+  const attendance = db
+    ? (await db.ref("attendance").once("value")).val() || {}
+    : mockData.attendance;
+  const students = db
+    ? (await db.ref("students").once("value")).val() || {}
+    : mockData.students;
 
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet(`Attendance Report - ${courseCode}`);
