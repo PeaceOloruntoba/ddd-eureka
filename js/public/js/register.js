@@ -3,8 +3,8 @@ import { auth } from "../firebase-init.js";
 import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 document.addEventListener("DOMContentLoaded", () => {
-  const registerForm = document.getElementById("registerForm"); // Changed from button to form ID
-  const registerBtn = document.getElementById("registerBtn"); // Button within the form
+  const registerForm = document.getElementById("registerForm");
+  const registerBtn = document.getElementById("registerBtn");
   const emailInput = document.getElementById("email");
   const passwordInput = document.getElementById("password");
   const coursesInput = document.getElementById("courses");
@@ -23,9 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   registerForm.addEventListener("submit", async (e) => {
-    // Listen to form submit
-    e.preventDefault(); // Prevent default form submission
-
+    e.preventDefault();
     const email = emailInput.value.trim();
     const password = passwordInput.value.trim();
     const courses = coursesInput.value.trim();
@@ -40,35 +38,28 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // --- Loading State Start ---
     registerBtn.disabled = true;
-    registerBtn.textContent = "Registering...";
-    errorMessageSpan.textContent = ""; // Clear previous errors
-    // --- Loading State End ---
+    registerBtn.textContent = "...";
+    errorMessageSpan.textContent = "";
 
     try {
-      // First, create user with Firebase Auth (client-side)
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
         password
       );
-      const user = userCredential.user;
+      const idToken = await userCredential.user.getIdToken(); // Get ID token
 
-      // Then, send necessary data to your Node.js backend to create lecturer profile
       const response = await fetch("/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email,
-          courses: courses, // Send courses from client
-        }),
+        body: JSON.stringify({ idToken, courses }), // Send idToken instead of email
       });
 
-      const data = await response.json(); // Backend should return success/error JSON
+      const data = await response.json();
 
       if (response.ok && data.status === "success") {
-        window.location.href = "/"; // Redirect to home page
+        window.location.href = "/";
       } else {
         errorMessageSpan.textContent =
           data.error || "Registration failed on server. Please try again.";
@@ -90,15 +81,11 @@ document.addEventListener("DOMContentLoaded", () => {
           default:
             displayMessage = error.message;
         }
-      } else {
-        displayMessage = error.message;
       }
       errorMessageSpan.textContent = displayMessage;
     } finally {
-      // --- Loading State End ---
       registerBtn.disabled = false;
       registerBtn.textContent = "Register";
-      // --- Loading State End ---
     }
   });
 });
