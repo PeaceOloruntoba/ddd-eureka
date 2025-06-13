@@ -14,45 +14,41 @@ import fs from "fs/promises";
 import { readFileSync } from "fs";
 import dotenv from "dotenv";
 
-dotenv.config(); // Load environment variables from .env file
+dotenv.config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Read Firebase Admin SDK credentials
 const serviceAccount = JSON.parse(
   readFileSync("./firebase_credentials.json", "utf8")
 );
 
 const app = express();
 
-// Firebase Admin SDK Initialization
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://attendance-e75b0-default-rtdb.firebaseio.com/", // REPLACE WITH YOUR DB URL
-  storageBucket: "attendance-e75b0.appspot.com", // REPLACE WITH YOUR STORAGE BUCKET
+  databaseURL: "https://attendance-e75b0-default-rtdb.firebaseio.com/",
+  storageBucket: "attendance-e75b0.appspot.com",
 });
 const db = getDatabase();
 const storage = getStorage().bucket();
 const auth = getAuth();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static("public")); // Serves static files from 'public' directory
+app.use(express.static("public"));
 app.use(fileUpload());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "davzee", // Use a strong secret from .env
+    secret: process.env.SESSION_SECRET || "davzee",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === "production" }, // Use secure cookies in production
+    cookie: { secure: process.env.NODE_ENV === "production" },
   })
 );
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// Pass Firebase client config to all EJS templates
 app.locals.firebaseClientConfig = {
   apiKey: process.env.FIREBASE_API_KEY,
   authDomain: process.env.AUTH_DOMAIN,
@@ -63,9 +59,7 @@ app.locals.firebaseClientConfig = {
   measurementId: process.env.MEASUREMENT_ID,
 };
 
-// --- Middleware for Authentication and Session Data ---
 app.use(async (req, res, next) => {
-  // Ensure session.user exists for authenticated requests
   if (req.session.user) {
     try {
       const lecturerRef = db.ref(`lecturers/${req.session.user}`);
@@ -74,7 +68,6 @@ app.use(async (req, res, next) => {
 
       if (lecturerData) {
         req.session.courses = lecturerData.courses || [];
-        // Set current_course if not already set or if it's no longer valid for this lecturer
         if (
           !req.session.current_course ||
           !req.session.courses.includes(req.session.current_course)
@@ -83,14 +76,14 @@ app.use(async (req, res, next) => {
             req.session.courses.length > 0 ? req.session.courses[0] : null;
         }
       } else {
-        // User's UID exists in session but not in DB, clear session
+        console.error("No lecturer data for UID:", req.session.user);
         req.session.destroy(() => {
           res.redirect("/login");
         });
         return;
       }
     } catch (error) {
-      console.error("Error fetching lecturer data for session:", error);
+      console.error("Error fetching lecturer data:", error.message);
       req.session.destroy(() => {
         res.redirect("/login");
       });
@@ -100,7 +93,6 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// Authentication Guard Middleware
 const isAuthenticated = (req, res, next) => {
   if (req.session.user) {
     return next();
@@ -108,31 +100,27 @@ const isAuthenticated = (req, res, next) => {
   res.redirect("/login");
 };
 
-// --- Routes ---
-
-// GET / - Home/Root page (Real-time attendance camera)
 app.get("/", isAuthenticated, (req, res) => {
   res.render("index", {
     title: "Real-time Attendance",
     course: req.session.current_course || "N/A",
-    session: req.session, // Pass session data to EJS
-    firebaseClientConfig: app.locals.firebaseClientConfig, // Pass Firebase config for client-side
+    session: req.session,
+    firebaseClientConfig: app.locals.firebaseClientConfig,
   });
 });
 
-// GET /login - Login page
 app.get("/login", (req, res) => {
-  if (req.session.user) return res.redirect("/"); // Redirect if already logged in
+  if (req.session.user) return res.redirect("/");
   res.render("login", {
     title: "Login",
     error: null,
-    firebaseClientConfig: app.locals.firebaseClientConfig, // Pass Firebase config
+    firebaseClientConfig: app.locals.firebaseClientConfig,
     session: req.session,
   });
 });
 
-// POST /login - Handle Firebase client-side ID token login
 app.post("/login", async (req, res) => {
+  console.log("Login attempt:", req.body);
   const { idToken } = req.body;
   try {
     const decodedToken = await auth.verifyIdToken(idToken);
@@ -141,9 +129,6 @@ app.post("/login", async (req, res) => {
     ).val();
 
     if (!lecturerData) {
-      // User authenticated with Firebase, but no lecturer profile in our DB
-      // This could happen if they registered directly with Firebase Auth without our custom flow.
-      // You might want to auto-create a profile here or reject.
       throw new Error("Lecturer profile not found. Please register.");
     }
 
@@ -154,14 +139,13 @@ app.post("/login", async (req, res) => {
 
     res.json({ status: "success" });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("Login error:", error.message);
     res.status(400).json({ error: error.message || "Login failed." });
   }
 });
 
-// GET /register - Register page
 app.get("/register", (req, res) => {
-  if (req.session.user) return res.redirect("/"); // Redirect if already logged in
+  if (req.session.user) return res.redirect("/");
   res.render("register", {
     title: "Register",
     error: null,
@@ -169,13 +153,13 @@ app.get("/register", (req, res) => {
   });
 });
 
-// POST /register - Handle user registration and initial course assignment
 app.post("/register", async (req, res) => {
-  const { idToken, courses } = req.body; // Expect ID Token and courses from client-side
+  console.log("Register attempt:", req.body);
+  const { idToken, courses } = req.body;
   try {
-    const decodedToken = await auth.verifyIdToken(idToken); // Verify the token
+    const decodedToken = await auth.verifyIdToken(idToken);
     const lecturerUid = decodedToken.uid;
-    const lecturerEmail = decodedToken.email; // Get email from decoded token
+    const lecturerEmail = decodedToken.email;
 
     const parsedCourses = courses
       ? courses
@@ -184,34 +168,30 @@ app.post("/register", async (req, res) => {
           .filter((c) => c)
       : [];
 
-    // Check if lecturer profile already exists to prevent overwriting
     const existingLecturer = (
       await db.ref(`lecturers/${lecturerUid}`).once("value")
     ).val();
     if (existingLecturer) {
-      // If profile exists, maybe update courses or just confirm registration
       await db.ref(`lecturers/${lecturerUid}`).update({
         courses: [
           ...new Set([...(existingLecturer.courses || []), ...parsedCourses]),
-        ], // Merge courses
+        ],
       });
     } else {
-      // Create new lecturer profile in RTDB
       await db.ref(`lecturers/${lecturerUid}`).set({
         email: lecturerEmail,
         courses: parsedCourses,
       });
     }
 
-    // Establish server-side session
     req.session.user = lecturerUid;
-    req.session.courses = parsedCourses; // Set based on the newly registered courses
+    req.session.courses = parsedCourses;
     req.session.current_course =
       parsedCourses.length > 0 ? parsedCourses[0] : null;
 
     res.json({ status: "success", message: "Registration successful!" });
   } catch (error) {
-    console.error("Registration error:", error);
+    console.error("Registration error:", error.message);
     let errorMessage = error.message;
     if (error.code === "auth/email-already-in-use") {
       errorMessage = "This email is already registered.";
@@ -228,7 +208,6 @@ app.post("/register", async (req, res) => {
   }
 });
 
-// GET /logout - Logout
 app.get("/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) {
@@ -238,7 +217,6 @@ app.get("/logout", (req, res) => {
   });
 });
 
-// POST /stream - Mark attendance via facial recognition
 app.post("/stream", isAuthenticated, async (req, res) => {
   const { student_id } = req.body;
   const lecturerId = req.session.user;
@@ -267,7 +245,6 @@ app.post("/stream", isAuthenticated, async (req, res) => {
       });
     }
 
-    // Check if the student is assigned to the current course
     if (!student.courses || !student.courses.includes(currentCourse)) {
       return res.json({
         status: "invalid_course",
@@ -275,8 +252,7 @@ app.post("/stream", isAuthenticated, async (req, res) => {
       });
     }
 
-    // Check if attendance already marked for today for this course
-    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const today = new Date().toISOString().split("T")[0];
     const attendanceRef = db.ref(`attendance/${student_id}`);
     const attendanceSnapshot = await attendanceRef.once("value");
     const records = attendanceSnapshot.val();
@@ -300,11 +276,10 @@ app.post("/stream", isAuthenticated, async (req, res) => {
       });
     }
 
-    // Mark attendance
     await attendanceRef.push({
       date: new Date().toISOString(),
       course: currentCourse,
-      lecturerId: lecturerId, // Record which lecturer marked it
+      lecturerId: lecturerId,
     });
 
     res.json({
@@ -319,7 +294,6 @@ app.post("/stream", isAuthenticated, async (req, res) => {
   }
 });
 
-// GET /attendance - Attendance History page
 app.get("/attendance", isAuthenticated, async (req, res) => {
   const attendanceSnapshot = await db.ref("attendance").once("value");
   const studentsSnapshot = await db.ref("students").once("value");
@@ -331,12 +305,11 @@ app.get("/attendance", isAuthenticated, async (req, res) => {
     title: "Attendance History",
     attendance: attendance,
     students: students,
-    course: req.session.current_course || "N/A", // The currently selected course
+    course: req.session.current_course || "N/A",
     session: req.session,
   });
 });
 
-// DELETE /attendance/:student_id/:record_id - Delete attendance record
 app.delete(
   "/attendance/:student_id/:record_id",
   isAuthenticated,
@@ -349,17 +322,14 @@ app.delete(
         .json({ status: "success", message: "Attendance record deleted." });
     } catch (error) {
       console.error("Error deleting attendance record:", error);
-      res
-        .status(500)
-        .json({
-          status: "error",
-          message: "Failed to delete attendance record.",
-        });
+      res.status(500).json({
+        status: "error",
+        message: "Failed to delete attendance record.",
+      });
     }
   }
 );
 
-// GET /students - Student Management page
 app.get("/students", isAuthenticated, async (req, res) => {
   const studentsSnapshot = await db.ref("students").once("value");
   const students = studentsSnapshot.val() || {};
@@ -367,12 +337,11 @@ app.get("/students", isAuthenticated, async (req, res) => {
   res.render("students", {
     title: "Manage Students",
     students: students,
-    course: req.session.current_course || "N/A", // The currently selected course
+    course: req.session.current_course || "N/A",
     session: req.session,
   });
 });
 
-// POST /students - Add/Upload Students
 app.post("/students", isAuthenticated, async (req, res) => {
   const currentCourse = req.session.current_course;
   if (!currentCourse) {
@@ -383,10 +352,8 @@ app.post("/students", isAuthenticated, async (req, res) => {
     );
   }
 
-  // Handle XLSX upload
   if (req.files && req.files.file) {
     const file = req.files.file;
-    // Allow lecturer to specify a course for uploaded students if different from current_course
     const courseToAssign = req.body.course_to_upload_students || currentCourse;
 
     if (!file.name.endsWith(".xlsx")) {
@@ -402,10 +369,10 @@ app.post("/students", isAuthenticated, async (req, res) => {
       await workbook.xlsx.load(file.data);
       const worksheet = workbook.worksheets[0];
 
-      const studentUpdates = {}; // Batch update object
+      const studentUpdates = {};
 
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // Skip header row
+        if (rowNumber === 1) return;
 
         const name = row.getCell(1).value;
         const matric_no = row.getCell(2).value;
@@ -413,50 +380,16 @@ app.post("/students", isAuthenticated, async (req, res) => {
         const level = row.getCell(4).value;
 
         if (name && matric_no && department && level) {
-          const student_id = matric_no.toString().trim(); // Ensure string and no whitespace
-
-          // Fetch existing student data to merge courses
-          // IMPORTANT: This is asynchronous. A batch update after all rows are processed is better.
-          // For simplicity here, I'll assume that new students are primarily assigned to this course,
-          // and for existing students, the course is added if not present.
-          // A more robust solution would collect all updates and then apply them in one db.ref().update() call.
-          // For now, we'll fetch existing courses synchronously for each row, which might be slow for huge files.
-          // Let's refine this to make it more efficient.
-
-          // This approach will perform N reads and N writes for N rows.
-          // For truly large files, a better approach is to read all rows,
-          // then query Firebase for all existing students in one go,
-          // then merge data in memory, then perform one large update.
-
-          // Simplified approach for demonstration:
+          const student_id = matric_no.toString().trim();
           studentUpdates[`students/${student_id}`] = {
             name,
             matric_no: student_id,
             department,
             level: level.toString(),
-            // courses will be handled by the update loop below
           };
-
-          // To ensure courses are properly merged, we need to read existing courses first.
-          // This requires `await` inside the loop, which `eachRow` doesn't directly support well.
-          // A better pattern:
-          // 1. Read all rows into an array of objects.
-          // 2. Map student_ids from array.
-          // 3. Fetch all existing students in one query.
-          // 4. Merge new data with existing data (especially courses).
-          // 5. Perform a single batch update.
-
-          // For current quick demo, assuming we'll add course to student's courses array
-          // if not present. If student already has courses, we ensure the `courseToAssign` is added.
-          // This needs to be done *after* fetching existing student data.
-          // The current single-student add and edit already do this.
-          // For XLSX, the simplest is to just add the student with the course,
-          // and lecturer must ensure the XLSX doesn't overwrite existing courses.
-          // Let's stick to the simpler approach of adding the course if not present.
         }
       });
 
-      // Now, process the collected updates and ensure courses are merged
       const studentIdsToUpdate = Object.keys(studentUpdates).map(
         (path) => path.split("/")[1]
       );
@@ -492,12 +425,10 @@ app.post("/students", isAuthenticated, async (req, res) => {
         )}`
       );
     }
-  }
-  // Handle single student addition (with image)
-  else if (req.body.name && req.body.matric_no) {
+  } else if (req.body.name && req.body.matric_no) {
     const { name, matric_no, department, level, course_to_add_student } =
       req.body;
-    const student_id = matric_no.trim(); // Use matric_no as ID
+    const student_id = matric_no.trim();
     const assignedCourse = course_to_add_student || currentCourse;
 
     if (!assignedCourse) {
@@ -509,7 +440,6 @@ app.post("/students", isAuthenticated, async (req, res) => {
     }
 
     try {
-      // Fetch existing student data to merge courses
       const studentRef = db.ref(`students/${student_id}`);
       const existingStudentSnapshot = await studentRef.once("value");
       const existingStudent = existingStudentSnapshot.val();
@@ -538,11 +468,10 @@ app.post("/students", isAuthenticated, async (req, res) => {
           .save(file.data, { contentType: file.mimetype });
         studentData.face_image = filePath;
       } else if (existingStudent && existingStudent.face_image) {
-        // Keep existing image if no new one is uploaded during edit
         studentData.face_image = existingStudent.face_image;
       }
 
-      await db.ref(`students/${student_id}`).set(studentData); // Use set to fully overwrite or create
+      await db.ref(`students/${student_id}`).set(studentData);
       return res.redirect("/students?success=Student added successfully!");
     } catch (error) {
       console.error("Error adding student:", error);
@@ -556,7 +485,6 @@ app.post("/students", isAuthenticated, async (req, res) => {
   res.redirect("/students?error=Invalid request for adding student.");
 });
 
-// DELETE /students/:student_id - Delete student profile
 app.delete("/students/:student_id", isAuthenticated, async (req, res) => {
   const { student_id } = req.params;
   try {
@@ -565,7 +493,6 @@ app.delete("/students/:student_id", isAuthenticated, async (req, res) => {
     const studentData = studentSnapshot.val();
 
     if (studentData && studentData.face_image) {
-      // Optionally delete face image from storage
       await storage
         .file(studentData.face_image)
         .delete()
@@ -574,16 +501,13 @@ app.delete("/students/:student_id", isAuthenticated, async (req, res) => {
             `Could not delete image for ${student_id}:`,
             err.message
           );
-          // Don't fail the entire deletion if image deletion fails
         });
     }
-    await studentRef.remove(); // Remove student profile
-    res
-      .status(200)
-      .json({
-        status: "success",
-        message: "Student profile deleted (attendance records remain).",
-      });
+    await studentRef.remove();
+    res.status(200).json({
+      status: "success",
+      message: "Student profile deleted (attendance records remain).",
+    });
   } catch (error) {
     console.error("Error deleting student:", error);
     res
@@ -592,10 +516,9 @@ app.delete("/students/:student_id", isAuthenticated, async (req, res) => {
   }
 });
 
-// POST /students/:student_id - Update student details (used for edit modal)
 app.post("/students/:student_id", isAuthenticated, async (req, res) => {
   const { student_id } = req.params;
-  const { name, department, level, courses } = req.body; // matric_no should be read-only if it's the ID
+  const { name, department, level, courses } = req.body;
 
   try {
     const studentRef = db.ref(`students/${student_id}`);
@@ -619,10 +542,10 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
 
     let studentData = {
       name: name || existingStudent.name,
-      matric_no: student_id, // Keep matric_no as the ID
+      matric_no: student_id,
       department: department || existingStudent.department,
       level: level || existingStudent.level,
-      courses: updatedCourses, // Overwrite with new courses
+      courses: updatedCourses,
     };
 
     if (req.files && req.files.face_image) {
@@ -633,10 +556,10 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
         .save(file.data, { contentType: file.mimetype });
       studentData.face_image = filePath;
     } else if (existingStudent.face_image) {
-      studentData.face_image = existingStudent.face_image; // Retain existing image if not updated
+      studentData.face_image = existingStudent.face_image;
     }
 
-    await studentRef.update(studentData); // Use update to only change specified fields
+    await studentRef.update(studentData);
     res.redirect("/students?success=Student updated successfully!");
   } catch (error) {
     console.error("Error updating student:", error);
@@ -648,29 +571,19 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
   }
 });
 
-// GET /students_data - API to fetch all student data for client-side ML
 app.get("/students_data", isAuthenticated, async (req, res) => {
   try {
     const studentsSnapshot = await db.ref("students").once("value");
     const students = studentsSnapshot.val() || {};
 
-    // Generate signed URLs for face images
     const studentsWithSignedUrls = {};
     for (const studentId in students) {
       const student = students[studentId];
       if (student.face_image) {
-        // Generate a public URL for the image
-        // Make sure your Firebase Storage rules allow public read for 'faces/*'
-        // Or generate signed URLs if rules are private and URLs are temporary
         const file = storage.file(student.face_image);
-        // Option 1: Public URL (if your storage rules allow public read)
-        // const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${storage.name}/o/${encodeURIComponent(student.face_image)}?alt=media`;
-        // studentsWithSignedUrls[studentId] = { ...student, face_image_url: publicUrl };
-
-        // Option 2: Generate Signed URLs (more secure)
         const [url] = await file.getSignedUrl({
           action: "read",
-          expires: Date.now() + 60 * 60 * 1000, // URL valid for 1 hour
+          expires: Date.now() + 60 * 60 * 1000,
         });
         studentsWithSignedUrls[studentId] = { ...student, face_image_url: url };
       } else {
@@ -686,7 +599,6 @@ app.get("/students_data", isAuthenticated, async (req, res) => {
   }
 });
 
-// GET /dashboard - Dashboard page
 app.get("/dashboard", isAuthenticated, async (req, res) => {
   const attendanceSnapshot = await db.ref("attendance").once("value");
   const studentsSnapshot = await db.ref("students").once("value");
@@ -700,7 +612,6 @@ app.get("/dashboard", isAuthenticated, async (req, res) => {
   });
 });
 
-// GET /add_courses - Page to manage lecturer's courses
 app.get("/add_courses", isAuthenticated, async (req, res) => {
   res.render("add_courses", {
     title: "Manage My Courses",
@@ -711,7 +622,6 @@ app.get("/add_courses", isAuthenticated, async (req, res) => {
   });
 });
 
-// POST /add_courses - Add new courses to lecturer's profile
 app.post("/add_courses", isAuthenticated, async (req, res) => {
   const { new_course } = req.body;
   const lecturerId = req.session.user;
@@ -726,7 +636,7 @@ app.post("/add_courses", isAuthenticated, async (req, res) => {
     });
   }
 
-  const courseToAdd = new_course.trim().toUpperCase(); // Standardize course names
+  const courseToAdd = new_course.trim().toUpperCase();
 
   try {
     const lecturerRef = db.ref(`lecturers/${lecturerId}`);
@@ -737,8 +647,7 @@ app.post("/add_courses", isAuthenticated, async (req, res) => {
     if (!currentCourses.includes(courseToAdd)) {
       currentCourses.push(courseToAdd);
       await lecturerRef.update({ courses: currentCourses });
-      req.session.courses = currentCourses; // Update session
-      // If it's the first course, set it as current
+      req.session.courses = currentCourses;
       if (!req.session.current_course) {
         req.session.current_course = courseToAdd;
       }
@@ -770,7 +679,6 @@ app.post("/add_courses", isAuthenticated, async (req, res) => {
   }
 });
 
-// DELETE /courses/:course_code - Remove a course from lecturer's profile
 app.delete("/courses/:course_code", isAuthenticated, async (req, res) => {
   const { course_code } = req.params;
   const lecturerId = req.session.user;
@@ -790,9 +698,8 @@ app.delete("/courses/:course_code", isAuthenticated, async (req, res) => {
     }
 
     await lecturerRef.update({ courses: updatedCourses });
-    req.session.courses = updatedCourses; // Update session
+    req.session.courses = updatedCourses;
 
-    // If the removed course was the current active course, switch to another or null
     if (req.session.current_course === course_code) {
       req.session.current_course =
         updatedCourses.length > 0 ? updatedCourses[0] : null;
@@ -803,29 +710,23 @@ app.delete("/courses/:course_code", isAuthenticated, async (req, res) => {
       .json({ status: "success", message: `Course '${course_code}' removed.` });
   } catch (error) {
     console.error("Error removing course:", error);
-    res
-      .status(500)
-      .json({
-        status: "error",
-        message: `Failed to remove course: ${error.message}`,
-      });
+    res.status(500).json({
+      status: "error",
+      message: `Failed to remove course: ${error.message}`,
+    });
   }
 });
 
-// POST /switch_course - Switch lecturer's active course
 app.post("/switch_course", isAuthenticated, (req, res) => {
   const { course } = req.body;
   if (req.session.courses && req.session.courses.includes(course)) {
     req.session.current_course = course;
   }
-  // Redirect back to the previous page or home if no referer
   res.redirect(req.headers.referer || "/");
 });
 
-// GET /generate_report/:courseCode - Generate Excel Report
 app.get("/generate_report/:courseCode", isAuthenticated, async (req, res) => {
   const courseCode = req.params.courseCode;
-  // Ensure the lecturer is authorized to generate report for this course
   if (!req.session.courses || !req.session.courses.includes(courseCode)) {
     return res.status(403).send("Unauthorized: You do not manage this course.");
   }
@@ -852,9 +753,8 @@ app.get("/generate_report/:courseCode", isAuthenticated, async (req, res) => {
   const studentsInCourse = Object.values(students).filter(
     (s) => s.courses && s.courses.includes(courseCode)
   );
-  const studentAttendanceSummary = {}; // To track present students for this course
+  const studentAttendanceSummary = {};
 
-  // Populate present students
   for (const student_id in attendance) {
     for (const record_id in attendance[student_id]) {
       const record = attendance[student_id][record_id];
@@ -874,7 +774,6 @@ app.get("/generate_report/:courseCode", isAuthenticated, async (req, res) => {
     }
   }
 
-  // Populate absent students (those assigned to the course but not marked present)
   for (const student of studentsInCourse) {
     if (!studentAttendanceSummary[student.matric_no]) {
       worksheet.addRow({
@@ -892,7 +791,6 @@ app.get("/generate_report/:courseCode", isAuthenticated, async (req, res) => {
     __dirname,
     `public/reports/attendance_${courseCode}_${Date.now()}.xlsx`
   );
-  // Ensure reports directory exists
   await fs
     .mkdir(path.dirname(outputPath), { recursive: true })
     .catch((e) => {});
@@ -905,34 +803,29 @@ app.get("/generate_report/:courseCode", isAuthenticated, async (req, res) => {
       res.status(500).send("Error generating report.");
     }
     try {
-      await fs.unlink(outputPath); // Clean up the file after download
+      await fs.unlink(outputPath);
     } catch (unlinkErr) {
       console.error("Error deleting temporary report file:", unlinkErr);
     }
   });
 });
 
-// Handle unhandled routes (404)
 app.use((req, res) => {
   res
     .status(404)
     .render("404", { title: "Page Not Found", session: req.session });
 });
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res
-    .status(500)
-    .render("error", {
-      title: "Something Went Wrong",
-      error: err.message,
-      session: req.session,
-    });
+  res.status(500).render("error", {
+    title: "Something Went Wrong",
+    error: err.message,
+    session: req.session,
+  });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
   console.log(`Server running on http://localhost:${PORT}`)
 );
-
