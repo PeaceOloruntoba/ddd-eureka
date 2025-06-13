@@ -1,4 +1,3 @@
-// public/js/login.js
 import { auth } from "../firebase-init.js";
 import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
@@ -22,11 +21,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // --- Loading State Start ---
     loginBtn.disabled = true;
     loginBtn.textContent = "Logging in...";
-    errorMessageSpan.textContent = ""; // Clear previous errors
-    // --- Loading State End ---
+    errorMessageSpan.textContent = "";
 
     try {
       const userCredential = await signInWithEmailAndPassword(
@@ -36,7 +33,6 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       const idToken = await userCredential.user.getIdToken();
 
-      // Send ID token to your Node.js backend for session management
       const response = await fetch("/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -46,7 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await response.json();
 
       if (data.status === "success") {
-        window.location.href = "/"; // Redirect to home page
+        window.location.href = "/";
       } else {
         errorMessageSpan.textContent =
           data.error || "Login failed. Please try again.";
@@ -58,7 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
         switch (error.code) {
           case "auth/user-not-found":
           case "auth/wrong-password":
-          case "auth/invalid-credential": // More generic since Firebase v10
+          case "auth/invalid-credential":
             displayMessage = "Invalid email or password.";
             break;
           case "auth/invalid-email":
@@ -68,17 +64,13 @@ document.addEventListener("DOMContentLoaded", () => {
             displayMessage = "Your account has been disabled.";
             break;
           default:
-            displayMessage = error.message; // Fallback to raw message if specific case not handled
+            displayMessage = error.message;
         }
-      } else {
-        displayMessage = error.message;
       }
       errorMessageSpan.textContent = displayMessage;
     } finally {
-      // --- Loading State End ---
       loginBtn.disabled = false;
       loginBtn.textContent = "Login";
-      // --- Loading State End ---
     }
   });
 });
