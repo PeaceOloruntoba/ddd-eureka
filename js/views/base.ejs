@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><%= title %></title>
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  </head>
+</head>
 <body class="w-screen min-h-screen max-h-screen flex flex-col">
   <nav class="flex flex-row items-center justify-between bg-blue-400 px-6 py-2 w-full h-fit text-white font-semibold fixed top-0 z-50">
     <div>
@@ -18,9 +18,9 @@
         <li><a href="/attendance">Attendance</a></li>
         <li><a href="/students">Students</a></li>
         <li><a href="/dashboard">Dashboard</a></li>
-        <li class="relative group"> <%# Added 'group' class for hover dropdown %>
-          <button class="bg-blue-600 px-4 py-1 rounded-lg">Profile</button>
-          <div class="absolute hidden group-hover:block bg-white text-black rounded shadow-lg mt-2 z-10 w-48">
+        <li class="relative">
+          <button id="profileButton" class="bg-blue-600 px-4 py-1 rounded-lg">Profile</button>
+          <div id="profileDropdown" class="absolute hidden bg-white text-black rounded shadow-lg mt-2 z-10 w-48 right-0">
             <a href="/add_courses" class="block px-4 py-2 hover:bg-gray-100">Manage Courses</a>
             <% if (session.courses && Array.isArray(session.courses) && session.courses.length > 0) { %>
               <form action="/switch_course" method="POST" class="block">
@@ -44,12 +44,47 @@
     <% } %>
   </nav>
 
-  <div class="flex-1 h-screen">
+  <div class="flex-1 h-screen pt-14">
     <%- body %> <%# This is the placeholder for view-specific content %>
   </div>
 
   <div class="w-full flex items-center justify-center text-center py-4 fixed bottom-0 z-50">
     <p>© 2025 Attendance System</p>
   </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const profileButton = document.getElementById('profileButton');
+      const profileDropdown = document.getElementById('profileDropdown');
+
+      // Toggle dropdown on button click
+      profileButton.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent click from bubbling up
+        profileDropdown.classList.toggle('hidden');
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!profileButton.contains(e.target) && !profileDropdown.contains(e.target)) {
+          profileDropdown.classList.add('hidden');
+        }
+      });
+
+      // Close dropdown when clicking a link inside it
+      profileDropdown.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+          profileDropdown.classList.add('hidden');
+        });
+      });
+
+      // Close dropdown when submitting the switch course form
+      const switchCourseSelect = profileDropdown.querySelector('select[name="course"]');
+      if (switchCourseSelect) {
+        switchCourseSelect.addEventListener('change', () => {
+          profileDropdown.classList.add('hidden');
+        });
+      }
+    });
+  </script>
 </body>
 </html>
