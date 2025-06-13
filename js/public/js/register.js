@@ -1,4 +1,3 @@
-// public/js/register.js
 import { auth } from "../firebase-init.js";
 import { createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
@@ -24,6 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   registerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+
     const email = emailInput.value.trim();
     const password = passwordInput.value.trim();
     const courses = coursesInput.value.trim();
@@ -48,15 +48,16 @@ document.addEventListener("DOMContentLoaded", () => {
         email,
         password
       );
-      const idToken = await userCredential.user.getIdToken(); // Get ID token
+      const idToken = await userCredential.user.getIdToken();
 
       const response = await fetch("/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, courses }), // Send idToken instead of email
+        body: JSON.stringify({ idToken, courses }),
       });
 
       const data = await response.json();
+      console.log("Register response:", data);
 
       if (response.ok && data.status === "success") {
         window.location.href = "/";
