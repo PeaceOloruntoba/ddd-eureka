@@ -4,20 +4,18 @@
     <div class="flex flex-col space-y-4">
       <h1 class="text-3xl font-bold text-blue-600">{{ title }}</h1>
       <div class="flex flex-col items-center justify-center space-y-4">
-        <!-- Camera Preview -->
         <video
           id="video"
           autoplay
           class="rounded shadow w-full"
         ></video>
 
-        <!-- Capture Button -->
-        <!-- <button
+        <button
           id="captureBtn"
           class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full"
         >
           Capture Image
-        </button> -->
+        </button>
       </div>
     </div>
 
@@ -31,23 +29,12 @@
       <span>Date: dd/mm/yyyy</span>
       <span>Time: HH:mm:ss</span>
     </div>
-    <!-- <div class="flex flex-col items-center justify-center">
-      <span class="text-red-600 text-2xl font-semibold"
-        >Failed to mark Attendance!</span
-      >
-      <span class="text-lg font-semibold"
-        >Student not found in the records</span
-      >
-      <span>Date: dd/mm/yyyy</span>
-      <span>Time: HH:mm:ss</span>
-    </div> -->
-  </div>
+    </div>
 
-  <!-- Captured Image Display
   <div id="result" class="mt-4">
     <h2 class="text-xl font-semibold">Captured Image:</h2>
     <img id="capturedImage" src="" alt="Captured" class="mt-2 border rounded shadow w-full max-w-md">
-  </div> -->
+  </div>
 </div>
 
 <script>
@@ -57,36 +44,51 @@
   const resultDiv = document.getElementById("result");
 
   // Start camera
+  // This code block is the key to displaying the camera feed.
+  // It requests access to the user's camera.
   navigator.mediaDevices
     .getUserMedia({ video: true })
     .then((stream) => {
+      // If access is granted, the video stream is set as the source for the <video> element.
       video.srcObject = stream;
     })
     .catch((err) => {
+      // If there's an error (e.g., camera blocked, no camera), it's logged to the console.
       console.error("Error accessing camera: ", err);
+      alert("Could not access the camera. Please check your permissions."); // Added an alert for user feedback
     });
 
   // Capture frame and send to Flask
-  captureBtn.onclick = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+  // This part will only work if the captureBtn is uncommented in the HTML.
+  if (captureBtn) { // Added a check to ensure captureBtn exists before adding event listener
+    captureBtn.onclick = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
 
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0);
 
-    const dataUrl = canvas.toDataURL("image/jpeg");
+      const dataUrl = canvas.toDataURL("image/jpeg");
 
-    fetch("/capture", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: dataUrl }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        capturedImage.src = data.path + "?t=" + new Date().getTime(); // prevent caching
-        resultDiv.scrollIntoView({ behavior: "smooth" });
-      });
-  };
+      fetch("/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.path) { // Check if data.path exists before assigning
+            capturedImage.src = data.path + "?t=" + new Date().getTime(); // prevent caching
+            resultDiv.scrollIntoView({ behavior: "smooth" });
+          } else {
+            console.error("No image path returned from server:", data);
+          }
+        })
+        .catch((error) => {
+          console.error("Error sending image to server:", error);
+        });
+    };
+  }
 </script>
 {% endblock %}
