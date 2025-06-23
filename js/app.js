@@ -429,19 +429,29 @@ app.get("/students", isAuthenticated, async (req, res) => {
   });
 });
 
+const FACE_IMAGES_DIR = path.join(__dirname, "public", "faces");
+fs.mkdir(FACE_IMAGES_DIR, { recursive: true }).catch(console.error);
+
 app.post("/students", isAuthenticated, async (req, res) => {
   const currentCourse = req.session.current_course;
   if (!currentCourse) {
-    return res.redirect(`/students?error=${encodeURIComponent("No course selected.")}`);
+    return res.redirect(
+      `/students?error=${encodeURIComponent(
+        "No course selected. Please select a course from your profile."
+      )}`
+    );
   }
 
-  // Handle XLSX Upload
   if (req.files && req.files.file) {
     const file = req.files.file;
     const courseToAssign = req.body.course_to_upload_students || currentCourse;
 
     if (!file.name.endsWith(".xlsx")) {
-      return res.redirect(`/students?error=${encodeURIComponent("Invalid file format. Please upload an XLSX file.")}`);
+      return res.redirect(
+        `/students?error=${encodeURIComponent(
+          "Invalid file format. Please upload an XLSX file."
+        )}`
+      );
     }
 
     try {
@@ -449,85 +459,193 @@ app.post("/students", isAuthenticated, async (req, res) => {
       await workbook.xlsx.load(file.data);
       const worksheet = workbook.worksheets[0];
 
+      if (!worksheet) {
+        return res.redirect(
+          `/students?error=${encodeURIComponent(
+            "XLSX file is empty or corrupted."
+          )}`
+        );
+      }
+
       const studentUpdates = {};
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // Skip header
-        const name = row.getCell(1).value?.toString();
-        const matric_no = row.getCell(2).value?.toString();
-        const department = row.getCell(3).value?.toString();
-        const level = row.getCell(4).value?.toString();
+        if (rowNumber === 1) return;
+        const name = row.getCell(1).value?.toString()?.trim();
+        const matric_no_raw = row.getCell(2).value?.toString()?.trim();
+        const department = row.getCell(3).value?.toString()?.trim();
+        const level = row.getCell(4).value?.toString()?.trim();
 
-        if (name && matric_no && department && level) {
-          const student_id = matric_no.trim();
-          studentUpdates[student_id] = { name, matric_no: student_id, department, level };
+        if (name && matric_no_raw && department && level) {
+          const student_id = matric_no_raw.toUpperCase();
+          studentUpdates[student_id] = {
+            name,
+            matric_no: student_id,
+            department,
+            level,
+          };
+        } else {
+          console.warn(
+            `Skipping invalid row ${rowNumber} in XLSX:`,
+            row.values
+          );
         }
       });
 
+      if (Object.keys(studentUpdates).length === 0) {
+        return res.redirect(
+          `/students?error=${encodeURIComponent(
+            "No valid student data found in the XLSX file. Check column headers and data."
+          )}`
+        );
+      }
+
       for (const student_id in studentUpdates) {
         const newStudentData = studentUpdates[student_id];
-        const existingStudent = db ? (await db.ref(`students/${student_id}`).once("value")).val() || {} : mockData.students[student_id] || {};
-        let courses = existingStudent.courses || [];
-        if (!courses.includes(courseToAssign)) courses.push(courseToAssign);
-        const studentData = { ...newStudentData, courses };
+        let existingStudent = {};
         if (db) {
-          await db.ref(`students/${student_id}`).set(studentData);
+          existingStudent =
+            (await db.ref(`students/${student_id}`).once("value")).val() || {};
         } else {
-          mockData.students[student_id] = studentData;
+          existingStudent = mockData.students[student_id] || {};
+        }
+
+        let courses = existingStudent.courses || [];
+        if (!courses.includes(courseToAssign)) {
+          courses.push(courseToAssign);
+        }
+
+        const studentDataToSave = {
+          ...newStudentData,
+          courses,
+          face_image: existingStudent.face_image || null,
+        };
+
+        if (db) {
+          await db.ref(`students/${student_id}`).set(studentDataToSave);
+        } else {
+          mockData.students[student_id] = studentDataToSave;
         }
       }
 
-      return res.redirect("/students?success=Students uploaded successfully!");
+      return res.redirect(
+        "/students?success=Students from XLSX uploaded successfully!"
+      );
     } catch (error) {
       console.error("Error processing XLSX:", error);
-      return res.redirect(`/students?error=${encodeURIComponent("Failed to upload XLSX: " + error.message)}`);
+      return res.redirect(
+        `/students?error=${encodeURIComponent(
+          "Failed to upload XLSX: " + error.message
+        )}`
+      );
     }
   }
 
-  // Handle Single Student Add
-  const { name, matric_no, department, level, course_to_add_student } = req.body;
-  const student_id = matric_no?.trim();
+  const { name, matric_no, department, level, course_to_add_student } =
+    req.body;
+  const student_id_formatted = matric_no?.trim().toUpperCase();
   const assignedCourse = course_to_add_student || currentCourse;
 
-  if (!name || !student_id || !department || !level || !assignedCourse) {
-    return res.redirect(`/students?error=${encodeURIComponent("All fields are required.")}`);
+  if (
+    !name ||
+    !student_id_formatted ||
+    !department ||
+    !level ||
+    !assignedCourse
+  ) {
+    return res.redirect(
+      `/students?error=${encodeURIComponent(
+        "All fields (Name, Matric No, Department, Level, Course) are required for adding a student."
+      )}`
+    );
   }
 
   try {
-    const existingStudent = db ? (await db.ref(`students/${student_id}`).once("value")).val() : mockData.students[student_id];
-    let courses = existingStudent?.courses || [];
-    if (!courses.includes(assignedCourse)) courses.push(assignedCourse);
+    let existingStudent = {};
+    if (db) {
+      existingStudent = (
+        await db.ref(`students/${student_id_formatted}`).once("value")
+      ).val();
+    } else {
+      existingStudent = mockData.students[student_id_formatted];
+    }
 
-    let studentData = { name, matric_no: student_id, department, level, courses };
+    if (existingStudent) {
+      return res.redirect(
+        `/students?error=${encodeURIComponent(
+          `Student with Matric No '${student_id_formatted}' already exists.`
+        )}`
+      );
+    }
+
+    let courses = [assignedCourse];
+    if (existingStudent && existingStudent.courses) {
+      courses = [...new Set([...existingStudent.courses, ...courses])];
+    }
+
+    let studentData = {
+      name,
+      matric_no: student_id_formatted,
+      department,
+      level,
+      courses,
+    };
 
     if (req.files && req.files.face_image) {
       const file = req.files.face_image;
       if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
-        return res.redirect(`/students?error=${encodeURIComponent("Face image must be JPEG or PNG.")}`);
+        return res.redirect(
+          `/students?error=${encodeURIComponent(
+            "Face image must be JPEG or PNG format."
+          )}`
+        );
       }
-      const filePath = `faces/${student_id}.${file.mimetype.split("/")[1]}`;
+
+      const imageExtension = file.mimetype.split("/")[1];
+      const filePath = `faces/${student_id_formatted}.${imageExtension}`;
       try {
         if (storage) {
-          await storage.file(filePath).save(file.data, { contentType: file.mimetype });
+          const fileRef = storage.file(filePath);
+          await fileRef.save(file.data, {
+            contentType: file.mimetype,
+            public: true,
+          });
+          studentData.face_image = filePath;
         } else {
-          await fs.writeFile(path.join(__dirname, "public", filePath), file.data);
+          await fs.writeFile(
+            path.join(
+              FACE_IMAGES_DIR,
+              `${student_id_formatted}.${imageExtension}`
+            ),
+            file.data
+          );
+          studentData.face_image = `faces/${student_id_formatted}.${imageExtension}`;
         }
-        studentData.face_image = filePath;
-      } catch (error) {
-        console.warn("Failed to save face image:", error.message);
+      } catch (imageError) {
+        console.warn(
+          "Failed to save face image (continuing without image):",
+          imageError.message
+        );
+        studentData.face_image = null;
       }
-    } else if (existingStudent?.face_image) {
-      studentData.face_image = existingStudent.face_image;
+    } else {
+      studentData.face_image = null;
+    }
+    if (db) {
+      await db.ref(`students/${student_id_formatted}`).set(studentData);
+    } else {
+      mockData.students[student_id_formatted] = studentData;
     }
 
-    if (db) {
-      await db.ref(`students/${student_id}`).set(studentData);
-    } else {
-      mockData.students[student_id] = studentData;
-    }
-    return res.redirect("/students?success=Student added successfully!");
+    return res.redirect(
+      `/students?success=${encodeURIComponent("Student added successfully!")}`
+    );
   } catch (error) {
     console.error("Error adding student:", error);
-    return res.redirect(`/students?error=${encodeURIComponent("Failed to add student: " + error.message)}`);
+    return res.redirect(
+      `/students?error=${encodeURIComponent(
+        "Failed to add student: " + error.message
+      )}`
+    );
   }
 });
 
