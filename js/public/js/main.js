@@ -1,3 +1,5 @@
+// main.js (your existing code, no changes needed here)
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth,
@@ -14,7 +16,7 @@ const overlayCanvas = document.getElementById("overlay");
 const statusSpan = document.getElementById("status");
 const studentInfoSpan = document.getElementById("student-info");
 const datetimeInfoSpan = document.getElementById("datetime-info");
-const cameraStatusSpan = document.getElementById("camera-status"); // This will primarily show camera status
+const cameraStatusSpan = document.getElementById("camera-status");
 
 let faceMatcher = null;
 let labeledDescriptors = [];
@@ -28,7 +30,6 @@ const DETECTION_INTERVAL_MS = 2000;
 const SUCCESS_DISPLAY_DURATION_MS = 5000;
 const DEBOUNCE_MARKING_MS = 30000;
 
-// Function to initialize and start the camera stream
 async function startCameraStream() {
   cameraStatusSpan.textContent = "Requesting camera access...";
   console.log("Attempting to start camera stream...");
@@ -37,14 +38,11 @@ async function startCameraStream() {
     video.srcObject = stream;
     video.onloadedmetadata = () => {
       video.play();
-      // Set canvas dimensions to match video
       overlayCanvas.width = video.videoWidth;
       overlayCanvas.height = video.videoHeight;
-      cameraStatusSpan.style.display = "none"; // Hide "Initializing camera..." message
+      cameraStatusSpan.style.display = "none";
       statusSpan.textContent = "Camera active.";
       console.log("Camera stream started successfully.");
-
-      // Once camera is active, proceed to load models and student data
       loadModelsAndStudentData();
     };
   } catch (error) {
@@ -59,9 +57,7 @@ async function startCameraStream() {
   }
 }
 
-// Function to load face-API.js models and student data
 async function loadModelsAndStudentData() {
-  // Load Models
   console.log("Attempting to load Face Recognition Models...");
   try {
     await faceapi.nets.ssdMobilenetv1.loadFromUri("/models");
@@ -75,15 +71,12 @@ async function loadModelsAndStudentData() {
     statusSpan.textContent =
       "Warning: AI models failed to load. Recognition may not work.";
     setTimeout(() => {
-      // Clear after a brief display
       if (!studentDataLoaded)
         statusSpan.textContent = "Camera active. Waiting for student data...";
     }, 5000);
   }
 
-  // Fetch Student Data if models loaded (or even if not, for completeness, but recognition won't work)
   if (modelsLoaded) {
-    // Only fetch student data if models are actually loaded for recognition
     console.log("Attempting to fetch student data for recognition...");
     statusSpan.textContent = "Fetching student data...";
     try {
@@ -146,7 +139,6 @@ async function loadModelsAndStudentData() {
         studentInfoSpan.textContent = "Waiting for face detection...";
         datetimeInfoSpan.textContent = "";
 
-        // Start detection loop only if models and data are ready
         if (detectionInterval) clearInterval(detectionInterval);
         detectionInterval = setInterval(
           detectAndMarkAttendance,
@@ -184,7 +176,6 @@ async function detectAndMarkAttendance() {
     return;
   }
   if (!faceMatcher) {
-    // faceMatcher only gets initialized if studentDataLoaded is true
     console.warn(
       "[Detection Loop] FaceMatcher not initialized (no student data). Skipping recognition."
     );
@@ -312,12 +303,10 @@ onAuthStateChanged(auth, (user) => {
       statusSpan.textContent =
         "Please select a course from the Profile menu to begin.";
       cameraStatusSpan.textContent = "Camera paused: No course selected.";
-      // Stop any existing detection interval if a course becomes unselected
       if (detectionInterval) clearInterval(detectionInterval);
       console.warn("Attendance system paused: No course selected.");
     } else {
-      // If a course is selected or the element isn't found (implying a default course), proceed
-      startCameraStream(); // Start camera first
+      startCameraStream();
     }
   } else if (
     !user &&

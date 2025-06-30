@@ -1,48 +1,50 @@
 <%
-  const pageBody = `
-    <div class="p-6 space-y-4 h-full flex-1 flex flex-col justify-center items-center pt-14">
-      <div class="text-center mb-4">
-        <h1 class="text-3xl font-bold text-blue-600">${title}</h1>
-        <p class="text-xl text-gray-700">Course: ${course || 'None Selected'}</p>
-        ${!course ? `<p class="text-red-500 font-bold">Please select a course from the Profile menu to mark attendance.</p>` : ''}
-      </div>
+  // This block is for defining variables or logic within the EJS template if needed.
+  // It won't be part of the final HTML output directly unless explicitly printed.
+%>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
-        <div class="flex flex-col space-y-4 items-center">
-          <div class="relative w-full aspect-video rounded shadow bg-black flex items-center justify-center">
-            <video
-              id="video"
-              autoplay
-              playsinline
-              class="w-full h-full rounded object-cover"
-            ></video>
-            <canvas id="overlay" class="absolute top-0 left-0 w-full h-full"></canvas>
-            <span id="camera-status" class="absolute text-white text-lg font-bold">Initializing camera...</span>
-          </div>
-        </div>
-
-        <div class="flex flex-col items-center justify-center p-4 bg-gray-100 rounded-lg shadow-md">
-          <span id="status" class="text-2xl font-semibold mb-2"></span>
-          <span id="student-info" class="text-lg font-semibold text-gray-700"></span>
-          <span id="datetime-info" class="text-gray-500 text-sm"></span>
-        </div>
-      </div>
+<%- include('base', { title: title, course: course, session: session, firebaseClientConfig: firebaseClientConfig, body: `
+  <div class="p-6 space-y-4 h-full flex-1 flex flex-col justify-center items-center pt-14">
+    <div class="text-center mb-4">
+      <h1 class="text-3xl font-bold text-blue-600">${title}</h1>
+      <p class="text-xl text-gray-700">Course: ${course || 'None Selected'}</p>
+      ${!course ? `<p class="text-red-500 font-bold">Please select a course from the Profile menu to mark attendance.</p>` : ''}
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-    <script>
-      // Pass Firebase config to main.js
-      window.firebaseClientConfig = {
-        apiKey: "${firebaseClientConfig.apiKey}",
-        authDomain: "${firebaseClientConfig.authDomain}",
-        projectId: "${firebaseClientConfig.projectId}",
-        storageBucket: "${firebaseClientConfig.storageBucket}",
-        messagingSenderId: "${firebaseClientConfig.messagingSenderId}",
-        appId: "${firebaseClientConfig.appId}",
-        measurementId: "${firebaseClientConfig.measurementId}"
-      };
-    </script>
-    <script type="module" src="/js/main.js"></script>
-  `;
-%>
-<%- include('base', { title: title, course: course, session: session, body: pageBody, firebaseClientConfig: firebaseClientConfig }) %>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
+      <div class="flex flex-col space-y-4 items-center">
+        <div class="relative w-full aspect-video rounded shadow bg-black flex items-center justify-center">
+          <video
+            id="video"
+            autoplay
+            playsinline
+            class="w-full h-full rounded object-cover"
+          ></video>
+          <canvas id="overlay" class="absolute top-0 left-0 w-full h-full"></canvas>
+          <span id="camera-status" class="absolute text-white text-lg font-bold">Initializing camera...</span>
+        </div>
+      </div>
+
+      <div class="flex flex-col items-center justify-center p-4 bg-gray-100 rounded-lg shadow-md">
+        <span id="status" class="text-2xl font-semibold mb-2"></span>
+        <span id="student-info" class="text-lg font-semibold text-gray-700"></span>
+        <span id="datetime-info" class="text-gray-500 text-sm"></span>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script>
+    // Pass Firebase config to main.js via a global window variable
+    window.firebaseClientConfig = {
+      apiKey: "${firebaseClientConfig.apiKey}",
+      authDomain: "${firebaseClientConfig.authDomain}",
+      projectId: "${firebaseClientConfig.projectId}",
+      storageBucket: "${firebaseClientConfig.storageBucket}",
+      messagingSenderId: "${firebaseClientConfig.messagingSenderId}",
+      appId: "${firebaseClientConfig.appId}",
+      measurementId: "${firebaseClientConfig.measurementId}"
+    };
+  </script>
+  <script type="module" src="/js/main.js"></script>
+` }) %>
