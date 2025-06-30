@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, send_file, url_for, session
 import firebase_admin
 from firebase_admin import credentials, auth, db, storage
 import cv2
