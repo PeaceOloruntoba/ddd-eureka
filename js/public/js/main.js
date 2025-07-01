@@ -1,5 +1,3 @@
-// main.js (your existing code, no changes needed here)
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth,
@@ -64,111 +62,114 @@ async function loadModelsAndStudentData() {
     await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
     await faceapi.nets.faceRecognitionNet.loadFromUri("/models");
     modelsLoaded = true;
-    console.log("Face-API.js models loaded successfully.");
+    console.log("✅ Face-API.js models loaded successfully.");
   } catch (error) {
     modelsLoaded = false;
-    console.error("Error loading Face-API.js models:", error);
+    console.error("❌ Error loading Face-API.js models:", error);
     statusSpan.textContent =
       "Warning: AI models failed to load. Recognition may not work.";
-    setTimeout(() => {
-      if (!studentDataLoaded)
-        statusSpan.textContent = "Camera active. Waiting for student data...";
-    }, 5000);
+    return;
   }
 
-  if (modelsLoaded) {
-    console.log("Attempting to fetch student data for recognition...");
-    statusSpan.textContent = "Fetching student data...";
-    try {
-      const user = auth.currentUser;
-      if (!user) {
-        console.warn(
-          "User not authenticated. Cannot fetch student data. Redirecting to login..."
-        );
-        statusSpan.textContent = "Not authenticated. Redirecting...";
-        setTimeout(() => (window.location.href = "/login"), 2000);
-        return;
-      }
+  if (!modelsLoaded) return;
 
-      const response = await fetch(`/students_data`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch student data: ${response.statusText}`);
-      }
-      const students = await response.json();
+  console.log("Fetching student data for recognition...");
+  statusSpan.textContent = "Fetching student data...";
 
-      labeledDescriptors = [];
-      for (const [student_id, studentData] of Object.entries(students || {})) {
-        if (studentData.face_image_url) {
-          try {
-            // Remove this line if it's still there: <img src={studentData.face_image_url} />
-            const img = await faceapi.fetchImage(
-              "https://toppng.com/uploads/preview/face-11563644706emoi9kz8jw.png"
-            );
-
-            const detection = await faceapi
-              .detectSingleFace(img) // <-- **THIS MUST BE `img` (the HTMLImageElement)**
-              .withFaceLandmarks()
-              .withFaceDescriptor();
-
-            // Add these console.logs temporarily for debugging:
-            console.log(
-              `Processing image for ${studentData.name} (${student_id}):`
-            );
-            console.log("Fetched image object:", img);
-            console.log("Detection result:", detection);
-
-            if (detection) {
-              labeledDescriptors.push(
-                new faceapi.LabeledFaceDescriptors(student_id, [
-                  detection.descriptor,
-                ])
-              );
-            } else {
-              console.warn(
-                `[Student Data] No face detected in reference image for ${studentData.name} (${student_id}).`
-              );
-            }
-          } catch (error) {
-            console.error(
-              `[Student Data] Error loading image or detecting face for ${student_id}:`,
-              error
-            );
-          }
-        }
-      }
-
-      if (labeledDescriptors.length === 0) {
-        console.warn(
-          "No labeled face descriptors loaded. Face recognition will not function."
-        );
-        statusSpan.textContent =
-          "No student face data available. Recognition paused.";
-      } else {
-        faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
-        studentDataLoaded = true;
-        console.log(`Loaded ${labeledDescriptors.length} student descriptors.`);
-        statusSpan.textContent = "Ready for attendance!";
-        studentInfoSpan.textContent = "Waiting for face detection...";
-        datetimeInfoSpan.textContent = "";
-
-        if (detectionInterval) clearInterval(detectionInterval);
-        detectionInterval = setInterval(
-          detectAndMarkAttendance,
-          DETECTION_INTERVAL_MS
-        );
-      }
-    } catch (error) {
-      studentDataLoaded = false;
-      console.error(
-        "Error fetching student data or preparing FaceMatcher:",
-        error
-      );
-      statusSpan.textContent = `Warning: Could not load student data. Recognition paused.`;
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      console.warn("User not authenticated. Redirecting to login...");
+      statusSpan.textContent = "Not authenticated. Redirecting...";
+      setTimeout(() => (window.location.href = "/login"), 2000);
+      return;
     }
-  } else {
-    console.warn("Skipping student data fetch as models failed to load.");
+
+    const response = await fetch(`/students_data`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch student data: ${response.statusText}`);
+    }
+    const students = await response.json();
+
+    labeledDescriptors = [];
+    let failedCount = 0;
+
+    for (const [student_id, studentData] of Object.entries(students || {})) {
+      if (!studentData.face_image_url) {
+        console.warn(`⚠️ No image URL for student ${student_id}`);
+        continue;
+      }
+
+      try {
+        const rawImg = await faceapi.fetchImage(studentData.face_image_url);
+
+        // Fix: Draw on white canvas and resize
+        const canvas = document.createElement("canvas");
+        canvas.width = 400;
+        canvas.height = 400;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(rawImg, 0, 0, canvas.width, canvas.height);
+
+        document.body.append(canvas);
+
+        const detection = await faceapi
+          .detectSingleFace(canvas)
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+
+          console.log(detection)
+
+        if (detection && detection.descriptor) {
+          labeledDescriptors.push(
+            new faceapi.LabeledFaceDescriptors(student_id, [
+              detection.descriptor,
+            ])
+          );
+          console.log(`✅ Descriptor loaded for ${student_id}`);
+        } else {
+          console.warn(
+            `⚠️ No face detected for ${studentData.name} (${student_id})`,
+            studentData.face_image_url
+          );
+          failedCount++;
+        }
+      } catch (error) {
+        console.error(
+          `❌ Error processing ${student_id} (${studentData.name}):`,
+          error
+        );
+        failedCount++;
+      }
+    }
+
+    if (labeledDescriptors.length === 0) {
+      console.warn("⚠️ No labeled face descriptors loaded.");
+      statusSpan.textContent =
+        "No student face data available. Recognition paused.";
+    } else {
+      faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+      studentDataLoaded = true;
+      console.log(`✅ Loaded ${labeledDescriptors.length} descriptors.`);
+      console.log(`❌ Failed detections: ${failedCount}`);
+
+      statusSpan.className = "text-green-600 text-2xl font-semibold mb-2";
+      statusSpan.textContent = "Ready for attendance!";
+      studentInfoSpan.textContent = "Waiting for face detection...";
+      datetimeInfoSpan.textContent = "";
+
+      if (detectionInterval) clearInterval(detectionInterval);
+      detectionInterval = setInterval(
+        detectAndMarkAttendance,
+        DETECTION_INTERVAL_MS
+      );
+    }
+  } catch (error) {
+    studentDataLoaded = false;
+    console.error("❌ Error fetching student data:", error);
     statusSpan.textContent =
-      "Camera active. Recognition unavailable (models failed).";
+      "Warning: Could not load student data. Recognition paused.";
   }
 }
 
