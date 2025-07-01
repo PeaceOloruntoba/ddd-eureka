@@ -100,11 +100,23 @@ async function loadModelsAndStudentData() {
       for (const [student_id, studentData] of Object.entries(students || {})) {
         if (studentData.face_image_url) {
           try {
-            const img = await faceapi.fetchImage(studentData.face_image_url);
+            // Remove this line if it's still there: <img src={studentData.face_image_url} />
+            const img = await faceapi.fetchImage(
+              "https://toppng.com/uploads/preview/face-11563644706emoi9kz8jw.png"
+            );
+
             const detection = await faceapi
-              .detectSingleFace(img)
+              .detectSingleFace(img) // <-- **THIS MUST BE `img` (the HTMLImageElement)**
               .withFaceLandmarks()
               .withFaceDescriptor();
+
+            // Add these console.logs temporarily for debugging:
+            console.log(
+              `Processing image for ${studentData.name} (${student_id}):`
+            );
+            console.log("Fetched image object:", img);
+            console.log("Detection result:", detection);
+
             if (detection) {
               labeledDescriptors.push(
                 new faceapi.LabeledFaceDescriptors(student_id, [
@@ -118,7 +130,7 @@ async function loadModelsAndStudentData() {
             }
           } catch (error) {
             console.error(
-              `[Student Data] Error loading image for ${student_id}:`,
+              `[Student Data] Error loading image or detecting face for ${student_id}:`,
               error
             );
           }

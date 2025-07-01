@@ -3,16 +3,17 @@ import session from "express-session";
 import cors from "cors";
 import admin from "firebase-admin";
 import { getAuth } from "firebase-admin/auth";
-import { getStorage } from "firebase-admin/storage";
+// import { getStorage } from "firebase-admin/storage";
 import { getDatabase } from "firebase-admin/database";
 import ExcelJS from "exceljs";
 import path from "path";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 import fileUpload from "express-fileupload";
-import fs from "fs/promises";
-import { readFileSync } from "fs";
+import fs from "fs/promises"; // Using promises version
+import { readFileSync } from "fs"; // Using sync for service account
 import dotenv from "dotenv";
+import cloudinary from "./config/cloudinary.js"
 
 dotenv.config();
 
@@ -29,18 +30,20 @@ let db, storage, auth;
 try {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://attendance-e75b0-default-rtdb.firebaseio.com/", // Replace <region>
-    storageBucket: "attendance-e75b0.appspot.com",
+    databaseURL: "https://attendance-e75b0-default-rtdb.firebaseio.com/",
+    // storageBucket: "attendance-e75b0.appspot.com",
   });
   db = getDatabase();
-  storage = getStorage().bucket();
+  // storage = getStorage().bucket();
   auth = getAuth();
   console.log("Firebase initialized successfully");
 } catch (error) {
   console.error("Firebase initialization failed:", error.message);
+  // Exit process if Firebase fails to initialize, as it's critical
+  process.exit(1);
 }
 
-// Mock data store (for fallback)
+// Mock data store (for fallback) - keep for development/testing if DB connection fails
 let mockData = {
   lecturers: {
     "mock-lecturer-uid": {
@@ -55,7 +58,8 @@ let mockData = {
       department: "Computer Science",
       level: "200",
       courses: ["CS101"],
-      face_image: "faces/S001.jpg",
+      // Update this to a sample Cloudinary URL
+      face_image: "https://res.cloudinary.com/ducorig4o/image/upload/v1751329786/sample-s001.jpg", // Replace with a real sample from your Cloudinary
     },
     S002: {
       name: "Jane Smith",
@@ -63,7 +67,8 @@ let mockData = {
       department: "Mathematics",
       level: "300",
       courses: ["MTH202"],
-      face_image: "faces/S002.jpg",
+      // Update this to a sample Cloudinary URL
+      face_image: "https://res.cloudinary.com/ducorig4o/image/upload/v1751329786/sample-s002.jpg", // Replace with a real sample from your Cloudinary
     },
   },
   attendance: {
@@ -81,7 +86,7 @@ let mockData = {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static("public"));
+app.use(express.static("public")); // Serves static files including 'models' and 'faces'
 app.use(fileUpload());
 app.use(
   session({
@@ -104,7 +109,7 @@ app.locals.firebaseClientConfig = {
   measurementId: process.env.MEASUREMENT_ID || "mock-measurement-id",
 };
 
-// Session validation middleware
+// Session validation middleware - fetches lecturer data for session
 app.use(async (req, res, next) => {
   if (req.session.user) {
     try {
@@ -139,14 +144,21 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Authentication middleware
 const isAuthenticated = (req, res, next) => {
   if (req.session.user) {
     return next();
   }
-  res.redirect("/login");
+  // For API requests, send 401. For page requests, redirect.
+  if (req.xhr || req.headers.accept.indexOf("json") > -1) {
+    res.status(401).json({ message: "Unauthorized" });
+  } else {
+    res.redirect("/login");
+  }
 };
 
-// Routes
+// --- Routes ---
+
 app.get("/", isAuthenticated, (req, res) => {
   res.render("index", {
     title: "Real-time Attendance",
@@ -313,12 +325,12 @@ app.post("/stream", isAuthenticated, async (req, res) => {
       });
     }
 
-    const today = new Date().toISOString().split("T")[0];
-    let attendance = db
+    const today = new Date().toISOString().split("T")[0]; // "2025-07-01"
+    let attendanceRecords = db
       ? (await db.ref(`attendance/${student_id}`).once("value")).val() || {}
       : mockData.attendance[student_id] || {};
 
-    let alreadyMarkedToday = Object.values(attendance).some(
+    let alreadyMarkedToday = Object.values(attendanceRecords).some(
       (record) =>
         new Date(record.date).toISOString().split("T")[0] === today &&
         record.course === currentCourse
@@ -333,17 +345,23 @@ app.post("/stream", isAuthenticated, async (req, res) => {
       });
     }
 
-    const newRecordId = `-${Math.random().toString(36).substr(2, 9)}`;
-    attendance[newRecordId] = {
+    // Use push() to generate a unique ID for the new attendance record
+    const newRecordRef = db ? db.ref(`attendance/${student_id}`).push() : null;
+    const newRecordId = newRecordRef
+      ? newRecordRef.key
+      : `-${Math.random().toString(36).substr(2, 9)}`;
+
+    const attendanceEntry = {
       date: new Date().toISOString(),
       course: currentCourse,
       lecturerId: lecturerId,
     };
 
     if (db) {
-      await db.ref(`attendance/${student_id}`).set(attendance);
+      await newRecordRef.set(attendanceEntry);
     } else {
-      mockData.attendance[student_id] = attendance;
+      mockData.attendance[student_id] = mockData.attendance[student_id] || {};
+      mockData.attendance[student_id][newRecordId] = attendanceEntry;
     }
 
     res.json({
@@ -402,25 +420,31 @@ app.delete(
       if (db) {
         await db.ref(`attendance/${student_id}/${record_id}`).remove();
       } else {
-        delete mockData.attendance[student_id][record_id];
+        // Handle mock data deletion carefully
+        if (mockData.attendance[student_id]) {
+          delete mockData.attendance[student_id][record_id];
+          if (Object.keys(mockData.attendance[student_id]).length === 0) {
+            delete mockData.attendance[student_id]; // Remove student if no records left
+          }
+        }
       }
       res
         .status(200)
         .json({ status: "success", message: "Attendance record deleted." });
     } catch (error) {
       console.error("Error deleting attendance record:", error);
-      res
-        .status(500)
-        .json({
-          status: "error",
-          message: "Failed to delete attendance record.",
-        });
+      res.status(500).json({
+        status: "error",
+        message: "Failed to delete attendance record.",
+      });
     }
   }
 );
 
 app.get("/students", isAuthenticated, async (req, res) => {
-  const students = db ? (await db.ref("students").once("value")).val() || {} : mockData.students;
+  const students = db
+    ? (await db.ref("students").once("value")).val() || {}
+    : mockData.students;
   res.render("students", {
     title: "Manage Students",
     students,
@@ -429,8 +453,9 @@ app.get("/students", isAuthenticated, async (req, res) => {
   });
 });
 
-const FACE_IMAGES_DIR = path.join(__dirname, "public", "faces");
-fs.mkdir(FACE_IMAGES_DIR, { recursive: true }).catch(console.error);
+// IMPORTANT: Ensure the 'faces' directory exists in 'public' for local file storage fallback
+const LOCAL_FACE_IMAGES_DIR = path.join(__dirname, "public", "faces");
+fs.mkdir(LOCAL_FACE_IMAGES_DIR, { recursive: true }).catch(console.error);
 
 app.post("/students", isAuthenticated, async (req, res) => {
   const currentCourse = req.session.current_course;
@@ -443,6 +468,9 @@ app.post("/students", isAuthenticated, async (req, res) => {
   }
 
   if (req.files && req.files.file) {
+    // Handling XLSX upload - No changes needed here related to image storage,
+    // as XLSX upload doesn't handle images.
+    // ... (rest of XLSX handling logic)
     const file = req.files.file;
     const courseToAssign = req.body.course_to_upload_students || currentCourse;
 
@@ -469,7 +497,7 @@ app.post("/students", isAuthenticated, async (req, res) => {
 
       const studentUpdates = {};
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
+        if (rowNumber === 1) return; // Skip header row
         const name = row.getCell(1).value?.toString()?.trim();
         const matric_no_raw = row.getCell(2).value?.toString()?.trim();
         const department = row.getCell(3).value?.toString()?.trim();
@@ -517,6 +545,7 @@ app.post("/students", isAuthenticated, async (req, res) => {
         const studentDataToSave = {
           ...newStudentData,
           courses,
+          // Preserve existing face_image or set to null if not present
           face_image: existingStudent.face_image || null,
         };
 
@@ -540,6 +569,7 @@ app.post("/students", isAuthenticated, async (req, res) => {
     }
   }
 
+  // Handling single student add/update form submission
   const { name, matric_no, department, level, course_to_add_student } =
     req.body;
   const student_id_formatted = matric_no?.trim().toUpperCase();
@@ -572,7 +602,7 @@ app.post("/students", isAuthenticated, async (req, res) => {
     if (existingStudent) {
       return res.redirect(
         `/students?error=${encodeURIComponent(
-          `Student with Matric No '${student_id_formatted}' already exists.`
+          `Student with Matric No '${student_id_formatted}' already exists. Use the edit feature to update.`
         )}`
       );
     }
@@ -588,10 +618,13 @@ app.post("/students", isAuthenticated, async (req, res) => {
       department,
       level,
       courses,
+      face_image: null, // Initialize as null, will be updated if image is uploaded
     };
 
     if (req.files && req.files.face_image) {
+      console.log("Face image file seen for upload.");
       const file = req.files.face_image;
+
       if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
         return res.redirect(
           `/students?error=${encodeURIComponent(
@@ -600,41 +633,56 @@ app.post("/students", isAuthenticated, async (req, res) => {
         );
       }
 
-      const imageExtension = file.mimetype.split("/")[1];
-      const filePath = `faces/${student_id_formatted}.${imageExtension}`;
       try {
-        if (storage) {
-          const fileRef = storage.file(filePath);
-          await fileRef.save(file.data, {
-            contentType: file.mimetype,
-            public: true,
-          });
-          studentData.face_image = filePath;
-        } else {
-          await fs.writeFile(
-            path.join(
-              FACE_IMAGES_DIR,
-              `${student_id_formatted}.${imageExtension}`
-            ),
-            file.data
-          );
-          studentData.face_image = `faces/${student_id_formatted}.${imageExtension}`;
-        }
+        // **Upload to Cloudinary**
+        const result = await cloudinary.uploader.upload(
+          `data:${file.mimetype};base64,${file.data.toString("base64")}`,
+          {
+            folder: "student_faces", // Folder in your Cloudinary account
+            public_id: student_id_formatted, // Unique ID for the image (e.g., matric number)
+            resource_type: "image", // Specify resource type
+            overwrite: true, // If a student with this matric_no uploads a new image, overwrite the old one
+          }
+        );
+
+        studentData.face_image = result.secure_url; // Store the secure HTTPS URL from Cloudinary
+        console.log(`Face image uploaded to Cloudinary: ${result.secure_url}`);
       } catch (imageError) {
         console.warn(
-          "Failed to save face image (continuing without image):",
+          "Failed to save face image to Cloudinary (continuing without image):",
           imageError.message
         );
-        studentData.face_image = null;
+        studentData.face_image = null; // Ensure it's null if save fails
+        // Fallback to local storage if Cloudinary upload fails
+        try {
+          const imageExtension = file.mimetype.split("/")[1];
+          const localFilePath = path.join(
+            LOCAL_FACE_IMAGES_DIR,
+            `${student_id_formatted}.${imageExtension}`
+          );
+          await fs.writeFile(localFilePath, file.data);
+          studentData.face_image = `faces/${student_id_formatted}.${imageExtension}`;
+          console.log(`Face image saved locally as fallback: ${localFilePath}`);
+        } catch (localSaveError) {
+          console.error(
+            "Failed to save face image locally as fallback:",
+            localSaveError.message
+          );
+          studentData.face_image = null; // Ensure it's null if even local save fails
+        }
       }
     } else {
+      console.warn(`No face image provided for ${student_id_formatted}.`);
       studentData.face_image = null;
     }
+
+    // Save student data to Firebase Realtime Database or mockData
     if (db) {
       await db.ref(`students/${student_id_formatted}`).set(studentData);
     } else {
       mockData.students[student_id_formatted] = studentData;
     }
+    console.log(studentData);
 
     return res.redirect(
       `/students?success=${encodeURIComponent("Student added successfully!")}`
@@ -649,18 +697,26 @@ app.post("/students", isAuthenticated, async (req, res) => {
   }
 });
 
+
 app.post("/students/:student_id", isAuthenticated, async (req, res) => {
   const { student_id } = req.params;
   const { name, department, level, courses } = req.body;
 
   try {
-    const existingStudent = db ? (await db.ref(`students/${student_id}`).once("value")).val() : mockData.students[student_id];
+    const existingStudent = db
+      ? (await db.ref(`students/${student_id}`).once("value")).val()
+      : mockData.students[student_id];
     if (!existingStudent) {
-      return res.redirect(`/students?error=${encodeURIComponent("Student not found.")}`);
+      return res.redirect(
+        `/students?error=${encodeURIComponent("Student not found for update.")}`
+      );
     }
 
     let updatedCourses = courses
-      ? courses.split(",").map(c => c.trim().toUpperCase()).filter(c => c)
+      ? courses
+          .split(",")
+          .map((c) => c.trim().toUpperCase())
+          .filter((c) => c)
       : existingStudent.courses || [];
 
     let studentData = {
@@ -669,32 +725,128 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
       department: department || existingStudent.department,
       level: level || existingStudent.level,
       courses: updatedCourses,
+      face_image: existingStudent.face_image || null, // Preserve existing image by default
     };
 
     if (req.files && req.files.face_image) {
+      console.log("Face image file seen for update.");
       const file = req.files.face_image;
       if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
-        return res.redirect(`/students?error=${encodeURIComponent("Face image must be JPEG or PNG.")}`);
+        return res.redirect(
+          `/students?error=${encodeURIComponent(
+            "Face image must be JPEG or PNG."
+          )}`
+        );
       }
-      const filePath = `faces/${student_id}.${file.mimetype.split("/")[1]}`;
+
       try {
-        if (storage) {
-          await storage.file(filePath).save(file.data, { contentType: file.mimetype });
-          if (existingStudent.face_image && existingStudent.face_image !== filePath) {
-            await storage.file(existingStudent.face_image).delete().catch(() => {});
-          }
-        } else {
-          await fs.writeFile(path.join(__dirname, "public", filePath), file.data);
-          if (existingStudent.face_image && existingStudent.face_image !== filePath) {
-            await fs.unlink(path.join(__dirname, "public", existingStudent.face_image)).catch(() => {});
+        // Delete old Cloudinary image if it exists
+        if (
+          existingStudent.face_image &&
+          existingStudent.face_image.includes("cloudinary.com")
+        ) {
+          // Extract public_id from the Cloudinary URL
+          // Example URL: https://res.cloudinary.com/ducorig4o/image/upload/v1751329786/student_faces/ZXCV.jpg
+          const parts = existingStudent.face_image.split("/");
+          const folderAndPublicId = parts
+            .slice(parts.indexOf("upload") + 1)
+            .join("/")
+            .split(".")[0]; // "student_faces/ZXCV"
+          const oldPublicId = folderAndPublicId;
+
+          // Only delete if the public_id is available and it's not the same as the new one (if overwriting with same public_id logic is strict)
+          // For simplicity and safety, we're doing a general delete if it's a Cloudinary URL
+          await cloudinary.uploader
+            .destroy(oldPublicId)
+            .catch((err) =>
+              console.warn(
+                `Could not delete old Cloudinary image ${oldPublicId}:`,
+                err.message
+              )
+            );
+          console.log(`Deleted old Cloudinary image: ${oldPublicId}`);
+        } else if (existingStudent.face_image) {
+          // Handle deletion of old local file if it existed (from fallback)
+          try {
+            await fs.unlink(
+              path.join(__dirname, "public", existingStudent.face_image)
+            );
+            console.log(
+              `Deleted old local fallback image: ${existingStudent.face_image}`
+            );
+          } catch (err) {
+            console.warn(
+              `Could not delete old local fallback image ${existingStudent.face_image}:`,
+              err.message
+            );
           }
         }
-        studentData.face_image = filePath;
+
+        // Upload new image to Cloudinary
+        const result = await cloudinary.uploader.upload(
+          `data:${file.mimetype};base64,${file.data.toString("base64")}`,
+          {
+            folder: "student_faces",
+            public_id: student_id, // Use student_id as public_id for new image
+            resource_type: "image",
+            overwrite: true,
+          }
+        );
+        studentData.face_image = result.secure_url; // Update to new Cloudinary URL
+        console.log(
+          `Face image updated and uploaded to Cloudinary: ${result.secure_url}`
+        );
       } catch (error) {
-        console.warn("Failed to save face image:", error.message);
+        console.warn(
+          "Failed to save/update face image to Cloudinary during student update (continuing without image):",
+          error.message
+        );
+        // Fallback to local storage if Cloudinary fails during update
+        try {
+          const imageExtension = file.mimetype.split("/")[1];
+          const localFilePath = path.join(
+            LOCAL_FACE_IMAGES_DIR,
+            `${student_id}.${imageExtension}`
+          );
+          await fs.writeFile(localFilePath, file.data);
+          studentData.face_image = `faces/${student_id}.${imageExtension}`;
+          console.log(`Face image saved locally as fallback: ${localFilePath}`);
+        } catch (localSaveError) {
+          console.error(
+            "Failed to save face image locally as fallback during update:",
+            localSaveError.message
+          );
+          studentData.face_image = existingStudent.face_image || null; // Keep old if local also fails
+        }
       }
-    } else if (existingStudent.face_image) {
-      studentData.face_image = existingStudent.face_image;
+    } else if (req.body.delete_face_image === "true") {
+      // Added to handle explicit deletion
+      if (existingStudent.face_image) {
+        try {
+          if (existingStudent.face_image.includes("cloudinary.com")) {
+            // Extract public_id from Cloudinary URL
+            const parts = existingStudent.face_image.split("/");
+            const folderAndPublicId = parts
+              .slice(parts.indexOf("upload") + 1)
+              .join("/")
+              .split(".")[0];
+            await cloudinary.uploader.destroy(folderAndPublicId);
+            console.log(`Face image deleted from Cloudinary for ${student_id}`);
+          } else {
+            // Handle local file deletion (from fallback)
+            await fs.unlink(
+              path.join(__dirname, "public", existingStudent.face_image)
+            );
+            console.log(`Face image deleted locally for ${student_id}`);
+          }
+        } catch (err) {
+          console.warn(
+            `Could not delete face image for ${student_id}:`,
+            err.message
+          );
+        }
+      }
+      studentData.face_image = null; // Set to null after deletion
     }
 
     if (db) {
@@ -705,70 +857,130 @@ app.post("/students/:student_id", isAuthenticated, async (req, res) => {
     return res.redirect("/students?success=Student updated successfully!");
   } catch (error) {
     console.error("Error updating student:", error);
-    return res.redirect(`/students?error=${encodeURIComponent("Failed to update student: " + error.message)}`);
+    return res.redirect(
+      `/students?error=${encodeURIComponent(
+        "Failed to update student: " + error.message
+      )}`
+    );
   }
 });
 
 app.delete("/students/:student_id", isAuthenticated, async (req, res) => {
   const { student_id } = req.params;
   try {
-    const studentData = db ? (await db.ref(`students/${student_id}`).once("value")).val() : mockData.students[student_id];
+    const studentData = db
+      ? (await db.ref(`students/${student_id}`).once("value")).val()
+      : mockData.students[student_id];
     if (!studentData) {
-      return res.status(404).json({ status: "error", message: "Student not found." });
+      return res
+        .status(404)
+        .json({ status: "error", message: "Student not found." });
     }
 
     if (studentData.face_image) {
       try {
-        if (storage) {
-          await storage.file(studentData.face_image).delete();
+        if (studentData.face_image.includes("cloudinary.com")) {
+          // Extract public_id from Cloudinary URL for deletion
+          const parts = studentData.face_image.split("/");
+          const folderAndPublicId = parts
+            .slice(parts.indexOf("upload") + 1)
+            .join("/")
+            .split(".")[0];
+          await cloudinary.uploader.destroy(folderAndPublicId);
+          console.log(
+            `Deleted face image from Cloudinary: ${studentData.face_image}`
+          );
         } else {
-          await fs.unlink(path.join(__dirname, "public", studentData.face_image));
+          // Handle local file deletion (from fallback)
+          await fs.unlink(
+            path.join(__dirname, "public", studentData.face_image)
+          );
+          console.log(`Deleted local face image: ${studentData.face_image}`);
         }
       } catch (err) {
         console.warn(`Could not delete image for ${student_id}:`, err.message);
       }
     }
 
+    // Delete attendance records for the student first
     if (db) {
+      await db.ref(`attendance/${student_id}`).remove();
+      console.log(`Deleted attendance records for student: ${student_id}`);
       await db.ref(`students/${student_id}`).remove();
+      console.log(`Deleted student data for: ${student_id}`);
     } else {
+      delete mockData.attendance[student_id];
       delete mockData.students[student_id];
     }
-    res.status(200).json({ status: "success", message: "Student deleted successfully." });
+    res.status(200).json({
+      status: "success",
+      message: "Student and associated data deleted successfully.",
+    });
   } catch (error) {
     console.error("Error deleting student:", error);
-    res.status(500).json({ status: "error", message: "Failed to delete student: " + error.message });
+    res.status(500).json({
+      status: "error",
+      message: "Failed to delete student: " + error.message,
+    });
   }
 });
 
+// --- NEW/MODIFIED: /students_data endpoint for Face-API.js ---
 app.get("/students_data", isAuthenticated, async (req, res) => {
   try {
     const students = db
       ? (await db.ref("students").once("value")).val() || {}
       : mockData.students;
-    const studentsWithSignedUrls = {};
+
+    const studentsWithFaceData = {};
     for (const studentId in students) {
       const student = students[studentId];
       if (student.face_image) {
         let url;
-        if (storage) {
-          const file = storage.file(student.face_image);
-          [url] = await file.getSignedUrl({
-            action: "read",
-            expires: Date.now() + 60 * 60 * 1000,
-          });
+        // Check if the URL is a Cloudinary URL or a local fallback path
+        if (student.face_image.includes("cloudinary.com")) {
+          url = student.face_image; // Already a direct Cloudinary URL
+          console.log(`Using Cloudinary URL for ${student.matric_no}: ${url.substring(0, 50)}...`);
+        } else if (student.face_image.startsWith("faces/")) {
+          // This is a local fallback path, ensure it exists
+          url = `/${student.face_image}`; // e.g., /faces/S001.jpg
+          try {
+            await fs.access(path.join(__dirname, "public", student.face_image));
+            console.log(`Using local URL for ${student.matric_no}: ${url}`);
+          } catch (localFileError) {
+            console.warn(
+              `Local face image file not found for ${student.face_image}:`,
+              localFileError.message
+            );
+            url = null; // Set to null if local file not found
+          }
         } else {
-          url = `/faces/${studentId}.jpg`;
+            // Unknown or invalid face_image format
+            console.warn(`Unknown face_image format for ${student.matric_no}: ${student.face_image}`);
+            url = null;
         }
-        studentsWithSignedUrls[studentId] = { ...student, face_image_url: url };
+
+        // Only include face_image_url if a valid URL was obtained
+        if (url) {
+          studentsWithFaceData[studentId] = { ...student, face_image_url: url };
+        } else {
+          console.warn(
+            `Skipping student ${studentId} (Name: ${student.name}) due to missing/inaccessible face image.`
+          );
+        }
       } else {
-        studentsWithSignedUrls[studentId] = student;
+        console.warn(
+          `Student ${studentId} (Name: ${student.name}) has no face_image path in Realtime Database.`
+        );
       }
     }
-    res.json(studentsWithSignedUrls);
+    console.log(
+      `Sending ${Object.keys(studentsWithFaceData).length} students with face data to client.`
+    );
+    res.json(studentsWithFaceData);
   } catch (error) {
-    console.error("Error fetching students data:", error);
-    res.status(500).json({ error: "Failed to fetch student data." });
+    console.error("Error fetching students data for Face-API.js:", error);
+    res.status(500).json({ error: "Failed to fetch student face data." });
   }
 });
 
@@ -899,12 +1111,10 @@ app.delete("/courses/:course_code", isAuthenticated, async (req, res) => {
       .json({ status: "success", message: `Course '${course_code}' removed.` });
   } catch (error) {
     console.error("Error removing course:", error);
-    res
-      .status(500)
-      .json({
-        status: "error",
-        message: `Failed to remove course: ${error.message}`,
-      });
+    res.status(500).json({
+      status: "error",
+      message: `Failed to remove course: ${error.message}`,
+    });
   }
 });
 
@@ -978,13 +1188,13 @@ app.get("/generate_report/:courseCode", isAuthenticated, async (req, res) => {
     }
   }
 
+  const reportsDir = path.join(__dirname, `public/reports`);
+  await fs.mkdir(reportsDir, { recursive: true }).catch((e) => {}); // Ensure reports directory exists
+
   const outputPath = path.join(
-    __dirname,
-    `public/reports/attendance_${courseCode}_${Date.now()}.xlsx`
+    reportsDir,
+    `attendance_${courseCode}_${Date.now()}.xlsx`
   );
-  await fs
-    .mkdir(path.dirname(outputPath), { recursive: true })
-    .catch((e) => {});
 
   await workbook.xlsx.writeFile(outputPath);
 
@@ -1001,12 +1211,14 @@ app.get("/generate_report/:courseCode", isAuthenticated, async (req, res) => {
   });
 });
 
+// Error handling middleware (catch-all for 404)
 app.use((req, res) => {
   res
     .status(404)
     .render("404", { title: "Page Not Found", session: req.session });
 });
 
+// Global error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).render("error", {
