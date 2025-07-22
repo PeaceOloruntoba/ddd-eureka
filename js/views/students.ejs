@@ -78,7 +78,7 @@
               <td>${student.department}</td>
               <td>${student.level}</td>
               <td>${student.courses ? student.courses.join(', ') : 'N/A'}</td>
-              <td>
+              <td class="flex items-center justify-center gap-2">
                 <button class="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" onclick="openEditStudentModal('${student_id}', '${encodeURIComponent(JSON.stringify(student))}')">E</button>
                 <button class="bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm ml-1" onclick="deleteStudent('${student_id}')">X</button>
               </td>

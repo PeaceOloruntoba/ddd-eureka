@@ -112,7 +112,7 @@ async function loadModelsAndStudentData() {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(rawImg, 0, 0, canvas.width, canvas.height);
 
-        document.body.append(canvas);
+        // document.body.append(canvas);
 
         const detection = await faceapi
           .detectSingleFace(canvas)
